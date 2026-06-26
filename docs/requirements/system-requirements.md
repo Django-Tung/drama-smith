@@ -1,8 +1,8 @@
 # 系统需求(drama-smith)
 
-> 版本:v0.7 · 状态:总览(技术实现归 architecture) · 最近更新:2026-06-26
+> 版本:v0.9 · 状态:总览(技术实现归 architecture) · 最近更新:2026-06-26
 > **定位**:本文档只记项目级**概要**与**未决问题**;各功能点的具体方案、规则、接口、专属待澄清见 `features/` 子文档,**技术实现/选型见 [`architecture/system-architecture.md`](../architecture/system-architecture.md)**,变更级需求与 spec 见 `openspec/`。
-> **变更沿革**:v0.2 认证 + 分镜 + MySQL · v0.3 按功能点拆子文档 · v0.4 认证细化(→ user-auth.md)· v0.5 AI 配置门禁 + core/llm 视频适配器(→ ai-config.md)· v0.6 主文档瘦身 · **v0.7 NFR 去技术化,具体技术实现统一归 architecture**。
+> **变更沿革**:v0.2 认证 + 分镜 + MySQL · v0.3 按功能点拆子文档 · v0.4 认证细化(→ user-auth.md)· v0.5 AI 配置门禁 + core/llm 视频适配器(→ ai-config.md)· v0.6 主文档瘦身 · v0.7 NFR 去技术化 · **v0.8 结构化分析扩写为完整生产流水线(剧名/剧集→剧本→拆解→分镜→编辑→视频→合并),音频推迟(→ analysis.md)· **v0.9 新增公共角色库(跨剧复用角色,→ character-library.md)**。
 
 ## 1. 项目愿景
 
@@ -29,7 +29,8 @@ drama-smith 是一个**综合性戏剧/剧本创作工具链**,围绕 LLM 能力
 | 多用户账号体系(注册/登录/数据隔离) | ✅ 做 → [user-auth.md](features/user-auth.md) |
 | 用户自带 AI 配置(文本/图片/视频三类模型) | ✅ 做 → [ai-config.md](features/ai-config.md) |
 | 结构化分析(角色/情节线/冲突/节奏) | ✅ 做(本期核心)→ [analysis.md](features/analysis.md) |
-| 分析结果的图像/视频富媒体增强 | ✅ 做 → [analysis.md](features/analysis.md) |
+| 分镜编辑 / 逐镜视频 / 合并成片(视频生产流水线;**本期不含音频**) | ✅ 做 → [analysis.md](features/analysis.md) |
+| 公共角色库(跨剧复用角色) | ✅ 做 → [character-library.md](features/character-library.md) |
 | 剧本生成(generation) | ⏸️ 推迟,保留愿景 |
 | 多角色模拟(simulation) | ⏸️ 推迟,保留愿景 |
 
@@ -42,6 +43,7 @@ drama-smith 是一个**综合性戏剧/剧本创作工具链**,围绕 LLM 能力
 | 用户与认证 | [features/user-auth.md](features/user-auth.md) | FR-U | ✅ 本期 |
 | AI 服务配置 | [features/ai-config.md](features/ai-config.md) | FR-C | ✅ 本期 |
 | 结构化分析 | [features/analysis.md](features/analysis.md) | FR-A | ✅ 本期核心 |
+| 公共角色库 | [features/character-library.md](features/character-library.md) | FR-L | ✅ 本期 |
 
 **后续愿景(本期不做)**:
 

@@ -12,7 +12,8 @@ docs/
 │   └── features/                      # 功能点细化(各自自包含)
 │       ├── user-auth.md               # 用户与认证(FR-U)
 │       ├── ai-config.md               # AI 服务配置(FR-C)
-│       └── analysis.md                # 结构化分析(FR-A,本期核心)
+│       ├── analysis.md                # 结构化分析与分镜视频流水线(FR-A,本期核心)
+│       └── character-library.md       # 公共角色库(FR-L)
 └── architecture/
     └── system-architecture.md         # 架构设计:技术栈、模块结构、关键决策
 ```
