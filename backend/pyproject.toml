@@ -1,0 +1,71 @@
+[project]
+name = "drama-smith"
+version = "0.1.0"
+description = "drama-smith 后端:结构化分析 + 分镜视频生产流水线(FastAPI + LangGraph)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "drama-smith" }]
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncmy>=0.2.10",
+    "alembic>=1.14",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.10",
+    "cryptography>=43.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drama_smith"]
+
+# ---- Ruff:lint + format ----
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "S", "C4"]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试中允许 assert
+"tests/*" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ---- mypy:strict ----
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+packages = ["drama_smith", "tests"]
+
+[[tool.mypy.overrides]]
+# asyncmy 暂无类型存根
+module = ["asyncmy.*"]
+ignore_missing_imports = true
+
+# ---- pytest ----
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

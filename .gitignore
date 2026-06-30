@@ -77,3 +77,12 @@ logs/
 *.sqlite
 *.sqlite3
 *.db
+
+# ---- Node / 前端(monorepo frontend/) ----
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
