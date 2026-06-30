@@ -24,7 +24,7 @@ drama-smith 已转向前后端分离的 Web 架构(FastAPI 后端 + 独立 React
 
 ## Impact
 
-- **代码**:新建后端 `src/drama_smith/`(`api/core/db/migrations/`)与前端独立工程(命名待定);首次引入 FastAPI、SQLAlchemy 2.0、Alembic、asyncmy、argon2-cffi、PyJWT、React、Vite、TanStack Query、Zustand 等依赖。
+- **代码**:monorepo —— 新建 `backend/`(后端包 `drama_smith`,src layout:`src/drama_smith/{api,core,db,migrations}`)与 `frontend/`(React + Vite),前后端同仓、各自独立工具链;首次引入 FastAPI、SQLAlchemy 2.0、Alembic、asyncmy、argon2-cffi、PyJWT、React、Vite、TanStack Query、Zustand 等依赖。
 - **API**:新增 `POST /api/auth/{register,login,logout,refresh}`、`GET /api/me`(契约见 [`docs/tech-solution/architecture.md §3.3`](../../../docs/tech-solution/architecture.md))。
 - **数据库**:新增 `users`、`refresh_tokens` 两表;后续里程碑所有业务表将以 `user_id` 外键关联,复用本期确立的隔离范式。
 - **系统/依赖**:需可用的 MySQL 8 实例与 Node 22 运行时;敏感配置(JWT 密钥、DB DSN)经 `.env` 注入、不入库/日志。

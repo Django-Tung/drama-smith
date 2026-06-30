@@ -1,6 +1,7 @@
 # 架构设计(drama-smith)
 
-> 版本:v0.6 · 状态:初稿 · 最近更新:2026-06-30
+> 版本:v0.7 · 状态:初稿 · 最近更新:2026-06-30
+> **v0.7 变更**:① 决策反转——由「非 monorepo(后端独仓)」改为 **monorepo**:前后端同仓,后端在 `backend/`(src layout 包 `drama_smith`)、前端在 `frontend/`(React + Vite),各自独立工具链;§1、§3、§4.4 同步修订;② §6「前端仓库位置/命名」待定项**已定**(并入 monorepo `frontend/`)。落地理由见 [`tech-solution/architecture.md`](../tech-solution/architecture.md) D10。
 > **v0.6 变更**:① §4.3 补**任务进度双通道**——长任务持久化为记录,状态经 REST 轮询(基线)+ WebSocket `/ws/tasks` 实时推送(自 analysis.md §4.5);② §6「分析长任务流式通道(SSE vs WebSocket)」待定项**已定**:轮询 + WS、不用 SSE。
 > **v0.5 变更**:① 新增 §4.6 **认证/令牌实现**(argon2id、JWT(HS256)、刷新令牌、客户端分层存储,自 user-auth.md §5 下沉);② §4.5 API Key 加密方案补全自包含;③ §6 增「分析长任务流式通道选型」待定项。
 > **v0.4 变更**:① 持久化层补 **MySQL**(技术栈表 + 目录结构 + §4.5 持久化决策);② `core/llm` 接缝补充:视频等 litellm 覆盖不全者以**自定义适配器**承接(NFR-2);③ 目录结构标注本期范围(仅落地 analysis,生成/模拟推迟)。
@@ -11,16 +12,16 @@
 
 ## 1. 总览
 
-drama-smith 是前后端分离的 Web 应用,**本仓库仅含后端**(Python):
+drama-smith 是前后端分离的 Web 应用,**monorepo**(前后端同仓,后端 `backend/` + 前端 `frontend/`):
 
 - **后端**(Python 3.12+ · FastAPI + LangGraph):暴露 WebSocket / HTTP 接口;**LangGraph 作为三大子系统的编排引擎**,把"生成 / 分析 / 模拟"实现为可检查点、可恢复的有状态图。
-- **前端**(独立项目 · Node 22 + React + TypeScript):用户界面,经 **WebSocket** 与后端实时交互,渲染剧本、角色卡、分析结果、模拟过程。
+- **前端**(`frontend/` · Node 22 + React + TypeScript):用户界面,经 **WebSocket** 与后端实时交互,渲染剧本、角色卡、分析结果、模拟过程。
 - **LLM 层**:供应商无关的接缝 `core/llm`(文本/图片经 litellm,视频等覆盖不全者以自定义适配器承接),藏在 LangGraph 节点之下,子系统不直接耦合任何厂商。
 - **持久化层**:**MySQL**——承载用户、(加密的)模型配置、分析任务及其结构化产物/分镜/富媒体,按用户隔离;ORM/迁移候选 SQLAlchemy 2.0 + Alembic(见 §4.5、§6)。
 
 ```
 ┌──────────────────────────┐         WebSocket(双向)         ┌────────────────────────────────────────┐
-│   前端(独立项目)         │  ───────────────────────────►   │            后端(本仓库)                │
+│   前端(frontend/)        │  ───────────────────────────►   │            后端(backend/)              │
 │   Node 22 + React (TS)    │  ◄───────────────────────────   │            Python 3.12+                 │
 │  ┌──────────────────────┐ │        JSON 文本帧 / 流式       │  ┌───────────────────────────────────┐  │
 │  │ pages 生成/分析/模拟   │ │                                 │  │  FastAPI(接口层)                  │  │
@@ -40,7 +41,7 @@ drama-smith 是前后端分离的 Web 应用,**本仓库仅含后端**(Python):
 
 ## 2. 技术栈(决策)
 
-### 2.1 前端(独立项目)
+### 2.1 前端(`frontend/`)
 
 | 维度 | 选型 | 理由(摘要) |
 |------|------|-------------|
@@ -51,7 +52,7 @@ drama-smith 是前后端分离的 Web 应用,**本仓库仅含后端**(Python):
 | 实时通信 | 原生 WebSocket(封装为 hook) | 双向,承载生成流式与模拟实时回合 |
 | 代码规范 | ESLint + Prettier | 前端 lint/format |
 
-### 2.2 后端(本仓库)
+### 2.2 后端(`backend/`)
 
 | 维度 | 选型 | 理由(摘要) |
 |------|------|-------------|
@@ -75,28 +76,27 @@ drama-smith 是前后端分离的 Web 应用,**本仓库仅含后端**(Python):
 | 消息格式 | JSON 文本帧 | 调试方便、类型可描述 |
 | 跨域 | 后端 CORS 放行前端源 | 跨域对接必需 |
 
-## 3. 目录结构(本仓库 = 后端)
+## 3. 目录结构(monorepo)
 
-> 非 monorepo:前端是独立项目,其结构不在本仓库内。本仓库只描述后端。
+> monorepo:前后端同仓。后端结构在 `backend/`,前端在 `frontend/`(结构见 [`tech-solution/frontend.md`](../tech-solution/frontend.md) §1)。
 
 ```
-drama-smith/                      # 本仓库 = 后端(FastAPI + LangGraph)
-├── pyproject.toml
-├── uv.lock
-├── .env.example
-├── src/
-│   └── drama_smith/
+drama-smith/                      # monorepo(前后端同仓)
+├── backend/                      # 后端(FastAPI + LangGraph)
+│   ├── pyproject.toml · uv.lock · .env.example
+│   └── src/drama_smith/
 │       ├── __init__.py
-│       ├── main.py               # FastAPI 应用入口(挂载 WebSocket 路由)
-│       ├── api/                  # 接口层:WebSocket 端点 + 少量 REST
-│       ├── core/                 # config / logging / llm 接缝(含视频自定义适配器)/ pydantic 模型
-│       ├── db/                   # SQLAlchemy ORM 模型 + 会话/引擎(本期:用户、模型配置、分析任务与产物)
-│       ├── migrations/           # Alembic 迁移(候选)
+│       ├── main.py               # FastAPI 应用入口(挂 REST + /ws/tasks、CORS、启动恢复)
+│       ├── api/                  # 接口层:REST 端点 + WebSocket /ws/tasks
+│       ├── core/                 # config / logging / security / crypto / llm 接缝(含视频自定义适配器)/ pydantic 模型
+│       ├── db/                   # SQLAlchemy ORM 模型 + 异步会话/引擎 + 仓储(强制 user_id 过滤)
+│       ├── migrations/           # Alembic 迁移
 │       ├── graphs/               # LangGraph 定义(本期仅分析图;生成/模拟图推迟)
 │       ├── analysis/             # 分析图节点与提示工程(本期核心)
 │       ├── generation/           # 生成图节点与提示工程(推迟,保留结构位)
 │       └── simulation/           # 多角色模拟图(推迟,保留结构位)
-├── tests/
+│   └── tests/
+├── frontend/                     # 前端(React + TS + Vite),结构见 tech-solution/frontend.md
 ├── docs/
 └── openspec/
 ```
@@ -122,8 +122,10 @@ FastAPI 仅作薄接口层:接 WebSocket → 调对应图 → 把图输出流式
 
 **任务进度(分析流水线 · 双通道)**:分析流水线的长任务(剧本优化 / 拆解 / 图片 / 视频 / 合并)**持久化为任务记录**,状态回传走**双通道**——REST 轮询(`GET /api/tasks`、`GET /api/tasks/:id`)为**可靠基线**(断线 / 关页面可继续看),前台打开任务页时经 WebSocket(`/ws/tasks`)**订阅**实时进度推送、断线自动回退轮询;两条通道共享同一任务记录,前端择一即可。需求见 [`analysis.md`](../requirements/features/analysis.md) §4.5。
 
-### 4.4 非 monorepo
-后端(drama-smith,本仓库)与前端(独立项目)各自独立仓库/工具链,通过 WebSocket/REST 接口契约对接。接口契约(端点、消息格式)在本仓库定义并维护。
+### 4.4 monorepo(前后端同仓)
+后端在 `backend/`(src layout 包 `drama_smith`),前端在 `frontend/`(React + Vite),**同属一个仓库**,各自独立工具链(Python/uv 与 Node/npm),通过 WebSocket/REST 接口契约对接。接口契约(端点、消息格式)统一在 [`tech-solution/architecture.md`](../tech-solution/architecture.md) 维护。
+
+> v0.7 反转此前 v0.3 的「非 monorepo」决策:改为前后端同仓以统一文档/CI/契约管理,落地理由见 [`tech-solution/architecture.md`](../tech-solution/architecture.md) D10。
 
 ### 4.5 持久化:MySQL(本期)
 用户、模型配置(含**加密 API Key**:信封加密——主密钥(MEK)经环境变量/KMS 注入、不入库,数据密钥以 AES-256-GCM 加密、密文与 IV 落库;需求见 [`features/ai-config.md`](../requirements/features/ai-config.md) §6)、分析任务及其结构化产物、分镜与富媒体引用,**均落 MySQL,按用户隔离**(NFR-7);前端不经 DB,经接口读写。ORM/迁移候选为 SQLAlchemy 2.0 + Alembic,最终随变更定。LangGraph 分析图的检查点(checkpointer)是否复用 MySQL 做长流程断点续跑,待定(§6)。
@@ -154,7 +156,7 @@ FastAPI 仅作薄接口层:接 WebSocket → 调对应图 → 把图输出流式
 - 是否需要 LangGraph 的**持久化检查点**(checkpointer,可复用 MySQL)以支持长流程断点续跑?
 - WebSocket 端点与消息格式的**接口契约**初稿(端点路径、帧结构)?
 - ~~**分析长任务的流式通道**选型(SSE vs WebSocket)?~~ → **已定(2026-06-30)**:长任务**持久化为记录**,状态经 **REST 轮询(基线)+ WebSocket `/ws/tasks` 实时推送**回传,**不采用 SSE**(断线回退轮询)。见 §4.3 与 [`analysis.md`](../requirements/features/analysis.md) §4.5。
-- 前端独立项目的**仓库位置/命名**?
+- ~~前端独立项目的**仓库位置/命名**?~~ → **已定(2026-06-30)**:并入 monorepo,前端为 `frontend/` 目录(见 §4.4)。
 
 ## 7. 与既有规划的关系(重要)
 

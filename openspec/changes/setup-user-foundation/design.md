@@ -1,6 +1,8 @@
 ## Context
 
-drama-smith 已决定采用前后端分离的 Web 架构(FastAPI 后端 + 独立 React 前端 + MySQL),完整技术方案沉淀于 [`docs/tech-solution/`](../../../docs/tech-solution/)(总纲 / 架构详案 / 数据库设计 / 后端 / 前端),需求侧见 [`docs/requirements/features/user-auth.md`](../../../docs/requirements/features/user-auth.md)(FR-U)。
+drama-smith 已决定采用前后端分离的 Web 架构(FastAPI 后端 + React 前端 + MySQL),完整技术方案沉淀于 [`docs/tech-solution/`](../../../docs/tech-solution/)(总纲 / 架构详案 / 数据库设计 / 后端 / 前端),需求侧见 [`docs/requirements/features/user-auth.md`](../../../docs/requirements/features/user-auth.md)(FR-U)。
+
+**仓库布局(已定)**:monorepo —— 前后端同仓,后端在 `backend/`(Python 包 `drama_smith`,src layout),前端在 `frontend/`。**此决策取代了 [`architecture.md §4.4`](../../../docs/tech-solution/architecture.md) 早先的「非 monorepo、前端独立工程」**(见 D10)。
 
 **当前状态**:仓库无后端/前端代码;`openspec/` 此前为空,旧的 `setup-project-foundation`(CLI 单包)已失效。本变更是新架构的第一个落地切片(里程碑 M0),只做「项目地基 + 用户与认证」,为后续里程碑(BYOK 配置、结构化分析、分镜视频流水线等)提供可运行的骨架与 `user_id` 隔离范式。
 
@@ -10,11 +12,11 @@ drama-smith 已决定采用前后端分离的 Web 架构(FastAPI 后端 + 独立
 
 **Goals:**
 
-- 可一条命令安装/运行/测试的后端骨架(uv + FastAPI + ruff/mypy/pytest)。
+- 可一条命令安装/运行/测试的后端骨架(`backend/` 下 uv + FastAPI + ruff/mypy/pytest)。
 - MySQL 持久化层(SQLAlchemy 2.0 async + Alembic),初始迁移建 `users`、`refresh_tokens`。
 - 完整认证流程:注册 / 登录 / 登出 / 刷新 / `GET /api/me`;argon2id + JWT(HS256)+ 可吊销刷新令牌 + 账号维度防爆破。
 - 多租户隔离的仓储范式(强制 `user_id` 过滤),后续业务表直接复用。
-- 可运行的前端骨架(Vite + React + TS),含登录/注册页、路由守卫、带 401 自动刷新的 REST 客户端、token 分层存储。
+- 可运行的前端骨架(`frontend/` 下 Vite + React + TS),含登录/注册页、路由守卫、带 401 自动刷新的 REST 客户端、token 分层存储。
 
 **Non-Goals:**
 
@@ -44,6 +46,8 @@ drama-smith 已决定采用前后端分离的 Web 架构(FastAPI 后端 + 独立
 
 **D9 客户端 token 分层存储。** access → `localStorage`(JS 读后附头);refresh → 内存 / `sessionStorage`(随标签关闭失效)。配合 CSP、输出转义、限制第三方脚本收敛 XSS 面。
 
+**D10 monorepo:前后端同仓(`backend/` + `frontend/`)。** 后端 `backend/`(uv + Python 包 `drama_smith`,src layout)、前端 `frontend/`(npm + Vite),各自独立工具链与依赖,同仓便于联调与契约对齐。**取代** [`architecture.md §4.4`](../../../docs/tech-solution/architecture.md) 早先的「非 monorepo、前端独立工程」决策——该决策被本轮调整推翻;相应同步更新 tech-solution 各篇与 `system-architecture.md`。*替代*:分仓(前端独立仓库,更解耦但联调/契约同步成本高)、单包(前后端混在同一目录,工具链互相污染)。同仓 + 各自子目录为本期最优。
+
 ## Risks / Trade-offs
 
 - **[access token 存 localStorage 易受 XSS 窃取]** → access 短时(15min)+ 收敛 XSS 面(CSP/转义/限第三方脚本)+ refresh 不入 localStorage;可接受(与 [`user-auth §5`](../../../docs/requirements/features/user-auth.md) 决策一致)。
@@ -51,21 +55,21 @@ drama-smith 已决定采用前后端分离的 Web 架构(FastAPI 后端 + 独立
 - **[无状态 access 无法即时吊销]** → 短时 15min + refresh 可吊销;登出即吊销 refresh,最多等 access 过期。本期不上 JWT 黑名单。
 - **[按账号锁定可被恶意触发锁定他人账号(账号 DoS)]** → 本期无邮箱,无法完全解决;属已接受的权衡(需求侧已裁定,见 [`user-auth §5/§6`](../../../docs/requirements/features/user-auth.md))。
 - **[Alembic 初始迁移依赖可用 MySQL]** → 本地/CI 用 docker-compose 起 MySQL 8,迁移在测试前自动 `alembic upgrade head`。
-- **[前端独立工程仓库未定]** → 本期可在仓库内(如 `web/` 子目录)先行开发,后续独立仓库;不影响契约。
+- **[monorepo 前后端工具链混杂]** → 各自子目录 + 独立锁文件(`backend/uv.lock`、`frontend/package-lock.json`);根目录只放文档与 docker-compose,不引入跨端耦合。
 
 ## Migration Plan
 
 **首次部署(M0):**
 
-1. 起可用的 MySQL 8 实例(utf8mb4);配置 `.env`(`DATABASE_URL`、`JWT_SECRET`、`CORS_ORIGINS` 等)。
-2. 后端:`uv sync` → `alembic upgrade head`(建 `users`、`refresh_tokens`)→ `uv run uvicorn drama_smith.main:app`。
-3. 前端:`npm install` → `npm run dev`(Vite 代理 `/api` 到后端)或 `npm run build` 出静态产物。
+1. 起可用的 MySQL 8 实例(utf8mb4);配置 `backend/.env`(`DATABASE_URL`、`JWT_SECRET`、`CORS_ORIGINS` 等)。
+2. 后端:`cd backend && uv sync` → `alembic upgrade head`(建 `users`、`refresh_tokens`)→ `uv run uvicorn drama_smith.main:app`。
+3. 前端:`cd frontend && npm install` → `npm run dev`(Vite 代理 `/api` 到后端)或 `npm run build` 出静态产物。
 4. 验证:注册→登录→带 token 访问 `GET /api/me`→登出→刷新链路。
 
-**回滚(仅开发期):** `alembic downgrade base` 删除两表;移除后端/前端工程目录。生产走向前迁移 + 兼容期,不做破坏性回滚。
+**回滚(仅开发期):** `cd backend && alembic downgrade base` 删除两表;移除 `backend/`、`frontend/` 目录。生产走向前迁移 + 兼容期,不做破坏性回滚。
 
 ## Open Questions
 
-- 前端**独立工程的仓库位置/命名**(architecture §7 遗留)——本期可先置于仓库内 `web/`,后续再迁。
+- ~~前端**独立工程的仓库位置/命名**(architecture §7 遗留)~~ → **已定(本轮)**:monorepo,前端置于本仓 `frontend/`(见 D10)。
 - JWT 签名算法最终是否升 RS256(非对称,便于多服务验签)?本期 HS256 足够,留待多实例/多服务时再议。
 - 登录锁定是否未来引入邮箱解锁?取决于是否开邮箱(本期不开)。

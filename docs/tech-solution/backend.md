@@ -28,7 +28,7 @@ db / storage(设施层) SQLAlchemy 仓储(强制 user_id 过滤)· FileStore
 承接 [architecture.md §6.1](./architecture.md):
 
 ```
-src/drama_smith/
+backend/src/drama_smith/
 ├── main.py               # FastAPI app、lifespan、CORS、路由挂载、启动恢复
 ├── core/
 │   ├── config.py         # Settings(pydantic-settings):DB/JWT/MEK/存储/并发上限/CORS 源

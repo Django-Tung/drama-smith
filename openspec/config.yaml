@@ -4,7 +4,7 @@ schema: spec-driven
 context: |
   项目:drama-smith —— 综合性戏剧/剧本创作工具链(围绕 LLM)。本期(v0.2/0.3)只落地「结构化分析 + 分镜视频生产流水线」子系统并打好「多用户 + BYOK」地基;剧本生成(generation)、多角色模拟(simulation)本期不做。
 
-  架构:前后端分离的 Web 应用,**非 monorepo** —— 本仓库(drama-smith)为后端,前端为独立工程(命名待定)。后端为单体 FastAPI 进程,内嵌**进程内 asyncio 任务执行器**;LangGraph 作为三大子系统的编排引擎(本期仅分析图)。
+  架构:前后端分离的 Web 应用,**monorepo** —— 前后端同仓:后端在 `backend/`(Python 包 `drama_smith`,src layout),前端在 `frontend/`(React + Vite),各自独立工具链。后端为单体 FastAPI 进程,内嵌**进程内 asyncio 任务执行器**;LangGraph 作为三大子系统的编排引擎(本期仅分析图)。
 
   技术栈:
     - 后端:Python 3.12+ / uv / FastAPI / LangGraph / pydantic v2 + pydantic-settings / SQLAlchemy 2.0 async(asyncmy)+ Alembic / MySQL 8(utf8mb4)/ argon2id / JWT(HS256)/ litellm + `core/llm` 自定义适配器(视频等覆盖不全者)/ ruff + mypy + pytest。

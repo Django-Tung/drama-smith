@@ -14,7 +14,7 @@
                           └──────────────┬──────────────┘
                                          │ HTTPS
 ┌────────────────────────────────────────▼─────────────────────────────────────┐
-│  前端(独立工程,生产为静态产物)                                                │
+│  前端(frontend/,生产为静态产物)                                                │
 │  React + TS + Vite  ·  路由/状态  ·  REST(fetch)+ WS 客户端  ·  token 分层存储  │
 └────────────────────────────────────────┬─────────────────────────────────────┘
             REST(JSON,Authorization: Bearer)  +  WebSocket(/ws/tasks)
@@ -47,7 +47,7 @@
 |------|----------|-------------|
 | 后端进程 | **单体**:1 个 uvicorn 进程,内置 asyncio 任务执行器 | 单实例足以承接本期量级;多实例时任务执行需外移到消息队列(见 §7) |
 | Worker | uvicorn 单 worker(或 `--workers 1`);任务在进程内 asyncio | 多 worker 会使进程内任务执行器失配(任务落某 worker 内存),故本期固定单 worker |
-| 前端 | 独立工程;开发用 Vite dev server,生产构建为静态产物,由 nginx(或后端静态托管)分发 | 开发期前端经 Vite 代理 `/api`、`/ws` 到后端,避开 CORS 复杂度 |
+| 前端(`frontend/`) | 开发用 Vite dev server,生产构建为静态产物,由 nginx(或后端静态托管)分发 | 开发期前端经 Vite 代理 `/api`、`/ws` 到后端,避开 CORS 复杂度 |
 | 数据库 | MySQL 8 单实例,utf8mb4 | 连接池(SQLAlchemy async pool) |
 | 富媒体 | 本地磁盘挂载卷,`FileStore` 抽象统一读写 | 迁移对象存储时仅换 `FileStore` 实现 |
 | 凭证密钥 | JWT 签名密钥、MEK 经环境变量(`.env`)注入 | 生产接 KMS(预留) |
@@ -290,32 +290,34 @@ REST 发起 ──► 校验(配额/门禁/输入) ──► 落 pending 记录 
 
 ## 6. 目录结构总览
 
-### 6.1 后端(本仓库)— 承接 [`system-architecture.md`](../architecture/system-architecture.md) §3,标注本期范围
+### 6.1 后端(`backend/`)— 承接 [`system-architecture.md`](../architecture/system-architecture.md) §3,标注本期范围
 
 ```
-drama-smith/
-├── pyproject.toml · uv.lock · .env.example · alembic.ini
-├── src/drama_smith/
-│   ├── main.py               # FastAPI 入口(挂 REST + /ws/tasks、CORS、启动恢复)
-│   ├── api/                  # 接口层:auth/users/models/characters/dramas/episodes
-│   │                         #         shots/media/video/render/export/tasks + ws/tasks
-│   ├── core/                 # config(pydantic-settings)· crypto(信封加密)· logging · security(JWT)
-│   ├── llm/                  # 供应商无关接缝:litellm 文本/图片 + 视频自定义适配器(统一接口)
-│   ├── graphs/               # LangGraph 图定义(本期:analysis 图)
-│   ├── analysis/             # 分析图节点 + 提示工程(拆解/分镜/一致性)
-│   ├── tasks/                # 任务执行器(asyncio)· 状态机 · 恢复 · 进度广播
-│   ├── storage/              # FileStore 抽象 + 本地磁盘实现
-│   ├── db/                   # SQLAlchemy 模型 · 异步会话/引擎 · 仓储层(强制 user_id 过滤)
-│   └── migrations/           # Alembic(env.py + versions/)
-├── tests/                    # pytest(+cov):单元/集成(含临时 MySQL 或 testcontainers)
+drama-smith/                  # monorepo(前后端同仓)
+├── backend/                  # 后端(FastAPI + LangGraph)
+│   ├── pyproject.toml · uv.lock · .env.example · alembic.ini
+│   └── src/drama_smith/
+│       ├── main.py           # FastAPI 入口(挂 REST + /ws/tasks、CORS、启动恢复)
+│       ├── api/              # 接口层:auth/users/models/characters/dramas/episodes
+│       │                     #         shots/media/video/render/export/tasks + ws/tasks
+│       ├── core/             # config(pydantic-settings)· crypto(信封加密)· logging · security(JWT)
+│       ├── llm/              # 供应商无关接缝:litellm 文本/图片 + 视频自定义适配器(统一接口)
+│       ├── graphs/           # LangGraph 图定义(本期:analysis 图)
+│       ├── analysis/         # 分析图节点 + 提示工程(拆解/分镜/一致性)
+│       ├── tasks/            # 任务执行器(asyncio)· 状态机 · 恢复 · 进度广播
+│       ├── storage/          # FileStore 抽象 + 本地磁盘实现
+│       ├── db/               # SQLAlchemy 模型 · 异步会话/引擎 · 仓储层(强制 user_id 过滤)
+│       └── migrations/       # Alembic(env.py + versions/)
+│   └── tests/                # pytest(+cov):单元/集成(含临时 MySQL 或 testcontainers)
+├── frontend/                 # 前端(React + Vite),结构见 §6.2 / frontend.md
 ├── docs/ · openspec/
 └── (generation/ simulation/  # 推迟,仅保留结构位,本期不实现)
 ```
 
-### 6.2 前端(独立工程)— 结构详见 [`frontend.md`](./frontend.md)
+### 6.2 前端(`frontend/`)— 结构详见 [`frontend.md`](./frontend.md)
 
 ```
-drama-smith-web/        # 独立工程(命名待定)
+frontend/        # monorepo 前端目录
 ├── package.json · vite.config.ts · tsconfig.json
 └── src/  routes/  components/  hooks/(useWebSocket/useApi)  stores/  api/(REST+WS 客户端)  types/
 ```

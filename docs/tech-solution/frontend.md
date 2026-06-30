@@ -1,16 +1,16 @@
 # 前端技术方案(drama-smith)
 
 > 版本:v0.1 · 状态:实施型 · 最近更新:2026-06-30
-> **定位**:承接 [`architecture.md`](./architecture.md)(通信契约)与 [`backend.md`](./backend.md)(后端实现),本文落地**前端(独立工程)的工程结构与实现**:React 工程、路由与页面、状态管理、REST/WebSocket 客户端、token 分层存储与自动刷新、多候选与流式交互、表单与上传、构建部署。前端绝不直连 MySQL 或 LLM,一切经后端契约。
+> **定位**:承接 [`architecture.md`](./architecture.md)(通信契约)与 [`backend.md`](./backend.md)(后端实现),本文落地**前端(`frontend/`)的工程结构与实现**:React 工程、路由与页面、状态管理、REST/WebSocket 客户端、token 分层存储与自动刷新、多候选与流式交互、表单与上传、构建部署。前端绝不直连 MySQL 或 LLM,一切经后端契约。
 > **默认决策**:Node.js 22 + React + TypeScript + Vite;状态 = TanStack Query(服务端)+ Zustand(客户端);原生 WebSocket 封装为 hook;ESLint + Prettier。
-> **仓库**:前端为**独立工程**(非 monorepo,承接 [architecture §4.4](../architecture/system-architecture.md));命名/位置待定([architecture §7](./architecture.md)),但其技术方案归本目录统一维护。
+> **仓库**:monorepo 前端目录 `frontend/`(前后端同仓,承接 [总纲](./README.md) 与 [`architecture.md`](./architecture.md) D10);其技术方案归本目录统一维护。
 
 ---
 
 ## 1. 工程结构
 
 ```
-drama-smith-web/
+frontend/
 ├── package.json · vite.config.ts · tsconfig.json · .eslintrc · .prettierrc
 ├── index.html
 └── src/
