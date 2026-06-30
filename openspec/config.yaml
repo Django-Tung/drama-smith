@@ -1,20 +1,51 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project context — shown to AI when creating artifacts.
+context: |
+  项目:drama-smith —— 综合性戏剧/剧本创作工具链(围绕 LLM)。本期(v0.2/0.3)只落地「结构化分析 + 分镜视频生产流水线」子系统并打好「多用户 + BYOK」地基;剧本生成(generation)、多角色模拟(simulation)本期不做。
+
+  架构:前后端分离的 Web 应用,**非 monorepo** —— 本仓库(drama-smith)为后端,前端为独立工程(命名待定)。后端为单体 FastAPI 进程,内嵌**进程内 asyncio 任务执行器**;LangGraph 作为三大子系统的编排引擎(本期仅分析图)。
+
+  技术栈:
+    - 后端:Python 3.12+ / uv / FastAPI / LangGraph / pydantic v2 + pydantic-settings / SQLAlchemy 2.0 async(asyncmy)+ Alembic / MySQL 8(utf8mb4)/ argon2id / JWT(HS256)/ litellm + `core/llm` 自定义适配器(视频等覆盖不全者)/ ruff + mypy + pytest。
+    - 前端:Node 22 + React + TypeScript + Vite / React Router / TanStack Query + Zustand / 原生 WebSocket 封装为 hook / ESLint + Prettier。
+
+  通信:REST(/api)为主 + WebSocket `/ws/tasks`(任务实时进度;**双通道**:REST 轮询为基线 + WS 增强,**不用 SSE**)。
+
+  关键约束(NFR):
+    - 多租户强制隔离:所有业务表带 `user_id`、仓储层强制 `WHERE user_id` 过滤、越权访问 → 404(不泄露存在)。
+    - 供应商无关:模型访问只经 `core/llm` 单一接缝(litellm + 自定义适配器);子系统绝不直接耦合厂商 SDK;切换供应商只改配置、不改代码。
+    - 凭证安全:用户 API Key 信封加密(AES-256-GCM,MEK 经 env/KMS 注入、不入库)落库、脱敏展示;令牌/密钥不得明文进日志。
+    - BYOK:用户自带模型凭证;文本模型**首次登录强制配置**,图片/视频可选(未配则相应功能门禁禁用)。
+
+  富媒体:本期本地磁盘 + `FileStore` 抽象(可平滑切 MinIO/S3),元数据落 MySQL。
+
+  文档分层(创建工件前务必先查对齐):
+    - `docs/requirements/`(要什么:愿景/范围/功能条目 FR-U/FR-C/FR-A/FR-L + 接口契约草案)
+    - `docs/architecture/system-architecture.md`(为什么这么选:技术栈表/决策记录)
+    - `docs/tech-solution/`(具体怎么实施:总纲 README + architecture/database/backend/frontend 四篇,**契约与表结构的权威来源**)
+    - `openspec/`(管变更:proposal/design/specs/tasks)
+
+  实施切片(里程碑):M0 地基+认证 → M1 BYOK 配置 → M2 结构化分析核心 → M3 视觉素材/视频 → M4 合并/导出/角色库 → M5 任务中心。每个变更聚焦一个里程碑、显式列 Non-Goals。
+
+  语言与提交:所有文档、工件、commit message 用**中文**;commit **不带** `Co-Authored-By: Claude` 尾注。
 
 # Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - 必含 Non-Goals,且范围严格对齐单个里程碑(不跨期)。
+    - Capabilities 用 kebab-case,与 docs/requirements/features/ 的功能点呼应。
+    - 仅在 spec 级行为变化时才列入 Modified Capabilities(否则用 ADDED)。
+    - 在 Impact 中指明受影响的 docs/tech-solution/ 章节。
+  design:
+    - 每项决策给出「为什么选 X 不选 Y」及考虑过的替代方案。
+    - 含 Risks/Trade-offs([风险] → 缓解)与 Migration Plan(部署 + 回滚)。
+    - 决策引用 docs/tech-solution/ 与 docs/architecture/,不复述理由。
+  specs:
+    - 每条 Requirement 至少一个 Scenario;Scenario 标题用恰好 4 个井号(####)。
+    - 用 SHALL/MUST 表述强制要求;场景可测,与 docs/requirements/features/ 的 FR 编号对齐。
+    - delta 操作正确:新能力用 `## ADDED Requirements`;改行为用 `## MODIFIED Requirements`(含完整更新内容)。
+  tasks:
+    - 按依赖排序,格式 `- [ ] N.M 描述`;粒度控制在「一个会话可完成」。
+    - 每组末尾带一个「验证」项作为完成判据。
+    - 实现细节引用 docs/tech-solution/ 对应章节,不重复决策理由。
