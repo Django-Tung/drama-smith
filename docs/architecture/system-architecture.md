@@ -1,11 +1,13 @@
 # 架构设计(drama-smith)
 
-> 版本:v0.5 · 状态:初稿 · 最近更新:2026-06-26
+> 版本:v0.6 · 状态:初稿 · 最近更新:2026-06-30
+> **v0.6 变更**:① §4.3 补**任务进度双通道**——长任务持久化为记录,状态经 REST 轮询(基线)+ WebSocket `/ws/tasks` 实时推送(自 analysis.md §4.5);② §6「分析长任务流式通道(SSE vs WebSocket)」待定项**已定**:轮询 + WS、不用 SSE。
 > **v0.5 变更**:① 新增 §4.6 **认证/令牌实现**(argon2id、JWT(HS256)、刷新令牌、客户端分层存储,自 user-auth.md §5 下沉);② §4.5 API Key 加密方案补全自包含;③ §6 增「分析长任务流式通道选型」待定项。
 > **v0.4 变更**:① 持久化层补 **MySQL**(技术栈表 + 目录结构 + §4.5 持久化决策);② `core/llm` 接缝补充:视频等 litellm 覆盖不全者以**自定义适配器**承接(NFR-2);③ 目录结构标注本期范围(仅落地 analysis,生成/模拟推迟)。
 > **v0.3 变更**:① 前后端通信改用 **WebSocket**(双向);② 前端确认 **TypeScript**;③ **非 monorepo**——本仓库(drama-smith)仅含后端,前端为独立项目;④ 补充 LangGraph 通俗说明。
 > (v0.2:由单包 CLI 改为前后端分离 Web 应用)
 > 本文档沉淀项目级架构决策。
+
 
 ## 1. 总览
 
@@ -118,6 +120,8 @@ FastAPI 仅作薄接口层:接 WebSocket → 调对应图 → 把图输出流式
 ### 4.3 WebSocket 实时通信
 生成、模拟这类长耗时/需中途输入的任务走 **WebSocket** 双向连接:后端把 LangGraph 的流式输出实时推给前端,前端也能在模拟中随时注入输入(如让某角色回应)。一次性、无状态请求(分析报告、健康检查)用 REST。后端配置 CORS 放行前端源。
 
+**任务进度(分析流水线 · 双通道)**:分析流水线的长任务(剧本优化 / 拆解 / 图片 / 视频 / 合并)**持久化为任务记录**,状态回传走**双通道**——REST 轮询(`GET /api/tasks`、`GET /api/tasks/:id`)为**可靠基线**(断线 / 关页面可继续看),前台打开任务页时经 WebSocket(`/ws/tasks`)**订阅**实时进度推送、断线自动回退轮询;两条通道共享同一任务记录,前端择一即可。需求见 [`analysis.md`](../requirements/features/analysis.md) §4.5。
+
 ### 4.4 非 monorepo
 后端(drama-smith,本仓库)与前端(独立项目)各自独立仓库/工具链,通过 WebSocket/REST 接口契约对接。接口契约(端点、消息格式)在本仓库定义并维护。
 
@@ -149,7 +153,7 @@ FastAPI 仅作薄接口层:接 WebSocket → 调对应图 → 把图输出流式
 - **MySQL 之上的配套**:ORM/迁移最终选型(SQLAlchemy 2.0 + Alembic 为候选),与 [`system-requirements.md`](../requirements/system-requirements.md) §6 对齐。
 - 是否需要 LangGraph 的**持久化检查点**(checkpointer,可复用 MySQL)以支持长流程断点续跑?
 - WebSocket 端点与消息格式的**接口契约**初稿(端点路径、帧结构)?
-- **分析长任务的流式通道**选型(SSE vs WebSocket)?§4.3 现仅定生成/模拟走 WebSocket、无状态走 REST,分析进度回传未定。
+- ~~**分析长任务的流式通道**选型(SSE vs WebSocket)?~~ → **已定(2026-06-30)**:长任务**持久化为记录**,状态经 **REST 轮询(基线)+ WebSocket `/ws/tasks` 实时推送**回传,**不采用 SSE**(断线回退轮询)。见 §4.3 与 [`analysis.md`](../requirements/features/analysis.md) §4.5。
 - 前端独立项目的**仓库位置/命名**?
 
 ## 7. 与既有规划的关系(重要)

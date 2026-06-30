@@ -1,8 +1,8 @@
 # 系统需求(drama-smith)
 
-> 版本:v0.9 · 状态:总览(技术实现归 architecture) · 最近更新:2026-06-26
+> 版本:v0.10 · 状态:总览(技术实现归 architecture) · 最近更新:2026-06-30
 > **定位**:本文档只记项目级**概要**与**未决问题**;各功能点的具体方案、规则、接口、专属待澄清见 `features/` 子文档,**技术实现/选型见 [`architecture/system-architecture.md`](../architecture/system-architecture.md)**,变更级需求与 spec 见 `openspec/`。
-> **变更沿革**:v0.2 认证 + 分镜 + MySQL · v0.3 按功能点拆子文档 · v0.4 认证细化(→ user-auth.md)· v0.5 AI 配置门禁 + core/llm 视频适配器(→ ai-config.md)· v0.6 主文档瘦身 · v0.7 NFR 去技术化 · **v0.8 结构化分析扩写为完整生产流水线(剧名/剧集→剧本→拆解→分镜→编辑→视频→合并),音频推迟(→ analysis.md)· **v0.9 新增公共角色库(跨剧复用角色,→ character-library.md)**。
+> **变更沿革**:v0.2 认证 + 分镜 + MySQL · v0.3 按功能点拆子文档 · v0.4 认证细化(→ user-auth.md)· v0.5 AI 配置门禁 + core/llm 视频适配器(→ ai-config.md)· v0.6 主文档瘦身 · v0.7 NFR 去技术化 · **v0.8 结构化分析扩写为完整生产流水线(剧名/剧集→剧本→拆解→分镜→编辑→视频→合并),音频推迟(→ analysis.md)· **v0.9 新增公共角色库(跨剧复用角色,→ character-library.md)** · **v0.10 analysis 新增任务中心 / 任务页(FR-A11):长任务统一持久化、任务页跨剧集汇总,状态经 REST 轮询 + WebSocket 实时回传(→ analysis.md §4.5)**。
 
 ## 1. 项目愿景
 
@@ -31,6 +31,7 @@ drama-smith 是一个**综合性戏剧/剧本创作工具链**,围绕 LLM 能力
 | 结构化分析(角色/情节线/冲突/节奏) | ✅ 做(本期核心)→ [analysis.md](features/analysis.md) |
 | 分镜编辑 / 逐镜视频 / 合并成片(视频生产流水线;**本期不含音频**) | ✅ 做 → [analysis.md](features/analysis.md) |
 | 公共角色库(跨剧复用角色) | ✅ 做 → [character-library.md](features/character-library.md) |
+| 任务中心 / 任务页(长任务状态:轮询 + WebSocket) | ✅ 做 → [analysis.md](features/analysis.md) §4.5 |
 | 剧本生成(generation) | ⏸️ 推迟,保留愿景 |
 | 多角色模拟(simulation) | ⏸️ 推迟,保留愿景 |
 
