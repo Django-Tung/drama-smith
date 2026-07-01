@@ -68,6 +68,6 @@
 
 ## 9. 联调与收尾
 
-- [ ] 9.1 前后端本地联调(根 `docker-compose` MySQL + `cd backend && uv run uvicorn ...` + `cd frontend && npm run dev`)
-- [ ] 9.2 补 `backend/.env.example`、起服务说明(根 README 汇总 backend/frontend 启动)
-- [ ] 9.3 `openspec status --change setup-user-foundation` 确认工件齐备、可 `/opsx:apply`
+- [x] 9.1 前后端本地联调(外部 MySQL 经 `backend/.env` + `cd backend && uv run uvicorn ...` + `cd frontend && yarn dev`)
+- [x] 9.2 补 `backend/.env.example`、起服务说明(根 `README.md` 汇总 backend/frontend 启动)
+- [x] 9.3 `openspec status --change setup-user-foundation` 确认工件齐备、可 `/opsx:apply`
