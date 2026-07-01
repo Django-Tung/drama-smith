@@ -48,8 +48,8 @@ extend-exclude = ["src/drama_smith/migrations"]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "S", "C4"]
 
 [tool.ruff.lint.per-file-ignores]
-# 测试中允许 assert
-"tests/*" = ["S101"]
+# 测试中允许 assert 与硬编码的测试口令(均为虚构值,非真实凭证)
+"tests/*" = ["S101", "S105", "S107"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -71,5 +71,27 @@ ignore_missing_imports = true
 # ---- pytest ----
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# 单一 session 级事件循环:缓存的 DB 引擎/连接池只绑定到一个 loop,跨用例复用
+# 才不会触发 "Future attached to a different loop"。用例/夹具均在同一 loop 上运行。
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --cov --cov-report=term-missing"
+
+# ---- 覆盖率 ----
+[tool.coverage.run]
+# source 取已安装的 drama_smith 包(src layout 可编辑安装);migrations 为生成式基础设施,排除。
+source = ["drama_smith"]
+branch = true
+# Starlette 中间件经 greenlet 桥接内部 ASGI 应用;不加此项,经 HTTP 路径的异步函数体
+# (await 之后)会系统性漏统(实测 auth_service 由 43% 升至正确覆盖)。
+concurrency = ["greenlet"]
+omit = ["src/drama_smith/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+fail_under = 90
