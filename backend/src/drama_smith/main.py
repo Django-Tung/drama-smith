@@ -12,11 +12,29 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from drama_smith.api.auth import router as auth_router
 from drama_smith.api.health import router as health_router
+from drama_smith.api.me import router as me_router
 from drama_smith.core.config import get_settings
+from drama_smith.core.errors import register_exception_handlers
 from drama_smith.db.base import dispose_engine, get_engine
 
 logger = logging.getLogger("drama_smith")
+
+# Swagger 分组说明(与各路由 `tags` 名称对应)。
+_OPENAPI_TAGS: list[dict[str, str]] = [
+    {"name": "health", "description": "健康检查 / 探活(无鉴权)。"},
+    {"name": "auth", "description": "用户注册、登录、登出与令牌刷新。"},
+    {"name": "users", "description": "当前用户信息。"},
+]
+
+_APP_DESCRIPTION = (
+    "drama-smith 后端 API。\n\n"
+    "**响应约定** — 成功:`{data, meta}`;错误:`{error: {code, message, details}}`。\n\n"
+    "**鉴权** — 除 `register` / `login` / `refresh` 外,所有端点需在请求头携带"
+    "`Authorization: Bearer <access_token>`。access 为 HS256 JWT(15min);"
+    "refresh 为不透明可吊销令牌(7d)。"
+)
 
 
 @asynccontextmanager
@@ -34,7 +52,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     """构造 FastAPI 应用(供 uvicorn 导入与测试复用)。"""
     settings = get_settings()
-    app: FastAPI = FastAPI(title=settings.app_name, lifespan=lifespan)
+    app: FastAPI = FastAPI(
+        title=settings.app_name,
+        description=_APP_DESCRIPTION,
+        version="0.1.0",
+        openapi_tags=_OPENAPI_TAGS,
+        lifespan=lifespan,
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -44,7 +68,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 统一错误格式(`{error:{code,message,details}}`)覆盖 FastAPI 默认响应。
+    register_exception_handlers(app)
+
     app.include_router(health_router, prefix="/api")
+    app.include_router(auth_router, prefix="/api")
+    app.include_router(me_router, prefix="/api")
     return app
 
 

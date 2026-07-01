@@ -23,32 +23,32 @@
 
 ## 3. 配置与安全原语
 
-- [ ] 3.1 `backend/src/drama_smith/core/config.py`:`Settings`(pydantic-settings)字段 `database_url`、`jwt_secret`(SecretStr)、`jwt_access_ttl`=15min、`refresh_ttl_days`=7、`cors_origins`、`login_max_failures`=5、`login_lock_minutes`=15;敏感字段不入 OpenAPI schema
-- [ ] 3.2 `backend/src/drama_smith/core/security.py`:argon2id 密码(`hash_password` / `verify_password`)
-- [ ] 3.3 `backend/src/drama_smith/core/security.py`:JWT 签发/校验(`create_access_token` HS256,claims `sub`/`username`/`iat`/`exp`;`verify_access_token`)
-- [ ] 3.4 `backend/src/drama_smith/core/security.py`:刷新令牌生成(`secrets.token_urlsafe`)+ 哈希(`hash_refresh_token`)
+- [x] 3.1 `backend/src/drama_smith/core/config.py`:`Settings`(pydantic-settings)字段 `database_url`、`jwt_secret`(SecretStr)、`jwt_access_ttl`=15min、`refresh_ttl_days`=7、`cors_origins`、`login_max_failures`=5、`login_lock_minutes`=15;敏感字段不入 OpenAPI schema
+- [x] 3.2 `backend/src/drama_smith/core/security.py`:argon2id 密码(`hash_password` / `verify_password`)
+- [x] 3.3 `backend/src/drama_smith/core/security.py`:JWT 签发/校验(`create_access_token` HS256,claims `sub`/`username`/`iat`/`exp`;`verify_access_token`)
+- [x] 3.4 `backend/src/drama_smith/core/security.py`:刷新令牌生成(`secrets.token_urlsafe`)+ 哈希(`hash_refresh_token`)
 
 ## 4. 鉴权依赖、多租户范式与错误处理
 
-- [ ] 4.1 `backend/src/drama_smith/core/errors.py`:领域异常 + 全局异常处理器 → 统一错误格式([`architecture §3.2`](../../../docs/tech-solution/architecture.md)),code 含 `unauthenticated`/`validation_error`/`not_found`/`conflict`/`locked`/`internal_error`
-- [ ] 4.2 `backend/src/drama_smith/db/repositories/`:`user_repo`、`refresh_token_repo`;方法签名强制带 `user_id`,查询 `WHERE id=:id AND user_id=:uid`,无命中 → 抛 `NotFound`
-- [ ] 4.3 `backend/src/drama_smith/api/deps.py`:OAuth2 Bearer scheme + `get_current_user` 依赖(验签 → 取 user → 校验未锁定)
+- [x] 4.1 `backend/src/drama_smith/core/errors.py`:领域异常 + 全局异常处理器 → 统一错误格式([`architecture §3.2`](../../../docs/tech-solution/architecture.md)),code 含 `unauthenticated`/`validation_error`/`not_found`/`conflict`/`locked`/`internal_error`
+- [x] 4.2 `backend/src/drama_smith/db/repositories/`:`user_repo`、`refresh_token_repo`;方法签名强制带 `user_id`,查询 `WHERE id=:id AND user_id=:uid`,无命中 → 抛 `NotFound`
+- [x] 4.3 `backend/src/drama_smith/api/deps.py`:OAuth2 Bearer scheme + `get_current_user` 依赖(验签 → 取 user → 校验未锁定)
 
 ## 5. 认证 API
 
-- [ ] 5.1 `POST /api/auth/register`:校验用户名(3–32,字母数字下划线)+ 密码(≥8 含字母+数字)、唯一性、argon2id 落库、签发 access+refresh(存 refresh 哈希)、201
-- [ ] 5.2 `POST /api/auth/login`:校验密码、账号锁定检查、失败递增计数/置 `locked_until`、成功清零并签发 access+refresh、记 `last_login_at`
-- [ ] 5.3 `POST /api/auth/refresh`:校验 refresh 哈希 + 未过期 + 未吊销 → 签发新 access
-- [ ] 5.4 `POST /api/auth/logout`:将当前 refresh 置 `revoked_at`(吊销)
-- [ ] 5.5 `GET /api/me`:返回 id/username + `text_model_configured: false`
-- [ ] 5.6 验证:全链路 register → login → /api/me → logout → refresh 行为符合 spec 各场景
+- [x] 5.1 `POST /api/auth/register`:校验用户名(3–32,字母数字下划线)+ 密码(≥8 含字母+数字)、唯一性、argon2id 落库、签发 access+refresh(存 refresh 哈希)、201
+- [x] 5.2 `POST /api/auth/login`:校验密码、账号锁定检查、失败递增计数/置 `locked_until`、成功清零并签发 access+refresh、记 `last_login_at`
+- [x] 5.3 `POST /api/auth/refresh`:校验 refresh 哈希 + 未过期 + 未吊销 → 签发新 access
+- [x] 5.4 `POST /api/auth/logout`:将当前 refresh 置 `revoked_at`(吊销)
+- [x] 5.5 `GET /api/me`:返回 id/username + `text_model_configured: false`
+- [x] 5.6 验证:全链路 register → login → /api/me → logout → refresh 行为符合 spec 各场景
 
 ## 6. 后端测试与质量门
 
-- [ ] 6.1 集成测试:register/login/logout/refresh/me 正常与异常路径(临时 MySQL,先 `alembic upgrade head`)
-- [ ] 6.2 测试:防爆破(5 次锁定、15min 自动解锁、成功重置计数)
-- [ ] 6.3 测试:无 token/坏 token → 401;越权访问他人资源 → 404;列表按 `user_id` 过滤
-- [ ] 6.4 质量门:`cd backend && ruff check . && mypy . && pytest --cov` 达约定阈值全绿
+- [x] 6.1 集成测试:register/login/logout/refresh/me 正常与异常路径(临时 MySQL,先 `alembic upgrade head`)
+- [x] 6.2 测试:防爆破(5 次锁定、15min 自动解锁、成功重置计数)
+- [x] 6.3 测试:无 token/坏 token → 401;越权访问他人资源 → 404;列表按 `user_id` 过滤
+- [x] 6.4 质量门:`cd backend && ruff check . && mypy . && pytest --cov` 达约定阈值全绿
 
 ## 7. 前端工程骨架(`frontend/`)
 

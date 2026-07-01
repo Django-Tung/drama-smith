@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import MetaData, text
 from sqlalchemy.dialects.mysql import DATETIME as MySQLDateTime
@@ -58,6 +58,15 @@ class TimestampMixin(CreatedAtMixin):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)"),
     )
+
+
+def utcnow() -> datetime:
+    """当前 UTC 时间(naive)。
+
+    D12 约定时间戳 `DATETIME(3)` 存 naive-UTC;故业务写入与比对一律用本函数返回的
+    naive 值,避免 aware(如 `datetime.now(UTC)`)与库读回的 naive 值比较报错。
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 # ---- 异步引擎 / 会话工厂(懒加载,模块级缓存)----

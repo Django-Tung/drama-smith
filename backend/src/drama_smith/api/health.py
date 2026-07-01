@@ -5,7 +5,11 @@ from fastapi import APIRouter
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health")
+@router.get(
+    "/health",
+    summary="健康检查",
+    description="无鉴权探活端点,供部署健康检查与前端联调。",
+)
 async def health() -> dict[str, str]:
     """无鉴权探活端点,供部署健康检查与前端联调。
 
