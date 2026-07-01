@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 
 import { refreshSession } from '@/api/client'
+import { Spinner } from '@/components/ui/spinner'
 import { useAuthStore } from '@/stores/auth'
 
 interface RequireAuthProps {
@@ -44,9 +45,9 @@ export function RequireAuth({ children }: RequireAuthProps) {
   if (status === 'rejected') return <Navigate to="/login" replace />
   if (status === 'checking') {
     return (
-      <main className="app-shell">
-        <p>校验会话…</p>
-      </main>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Spinner className="size-6" />
+      </div>
     )
   }
   return <>{children}</>

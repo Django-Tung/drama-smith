@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>drama-smith</title>
+    <script>
+      // 无闪烁暗色:React 挂载前按已存主题(zustand persist, key=drama-smith.ui)预先落 dark 类。
+      // system 模式跟随系统偏好;出错或缺省不阻塞渲染。
+      ;(function () {
+        try {
+          var raw = localStorage.getItem('drama-smith.ui')
+          var theme = raw ? (JSON.parse(raw).state || {}).theme : 'system'
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var isDark = theme === 'dark' || (theme === 'system' && prefersDark)
+          document.documentElement.classList.toggle('dark', isDark)
+          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

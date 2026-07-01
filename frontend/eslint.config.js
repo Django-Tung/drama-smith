@@ -37,6 +37,15 @@ export default tseslint.config(
     },
   },
 
+  // shadcn/ui 组件:导出 cva 变体常量属正常(非单组件导出),
+  // 关闭 fast-refresh 的约束(ui/ 视为库代码,不走开发期热更)。
+  {
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+
   // 收尾:关闭与 Prettier 冲突的格式化规则。
   prettierConfig,
 )

@@ -1,88 +1,160 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* 深色按 `.dark` 类切换(v4 写法,替代 v3 的 darkMode:"class")。 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * 设计令牌 → Tailwind 颜色工具类桥接(shadcn 约定)。
+ * 真值定义在下方 :root(浅)与 .dark(深)里,按 .dark 类覆盖。
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  --font-serif: Georgia, 'Source Serif Pro', 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+ * 创作暖调 —— 米纸底 / 墨字 / 墨绿强调 / 朱砂报错。
+ * 浅色(:root)。hex 取自设计令牌表,与用户确认的色板一致。
+ */
 :root {
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    sans-serif;
-  color-scheme: light dark;
+  --radius: 0.625rem;
+
+  --background: #faf7f2; /* 米纸 */
+  --foreground: #2b2622; /* 墨 */
+  --card: #ffffff;
+  --card-foreground: #2b2622;
+  --popover: #ffffff;
+  --popover-foreground: #2b2622;
+
+  --primary: #2f5d50; /* 墨绿 */
+  --primary-foreground: #faf7f2;
+  --secondary: #f2ede4;
+  --secondary-foreground: #2b2622;
+  --muted: #f2ede4;
+  --muted-foreground: #7a6f64; /* 弱化文字 */
+  --accent: #efe7d8;
+  --accent-foreground: #2b2622;
+  --destructive: #b23a48; /* 朱砂 */
+  --destructive-foreground: #faf7f2;
+
+  --border: #e4dccf;
+  --input: #e4dccf;
+  --ring: #2f5d50;
+
+  --chart-1: #2f5d50;
+  --chart-2: #b45309;
+  --chart-3: #b23a48;
+  --chart-4: #6b7280;
+  --chart-5: #8a6d3b;
+
+  --sidebar: #f6f1e8; /* 侧栏:比页面底略深,划分区域 */
+  --sidebar-foreground: #2b2622;
+  --sidebar-primary: #2f5d50;
+  --sidebar-primary-foreground: #faf7f2;
+  --sidebar-accent: #efe7d8;
+  --sidebar-accent-foreground: #2b2622;
+  --sidebar-border: #e4dccf;
+  --sidebar-ring: #2f5d50;
 }
 
-* {
-  box-sizing: border-box;
+/* 深色(.dark)镜像。 */
+.dark {
+  --background: #1c1815;
+  --foreground: #efe7d8;
+  --card: #25201b;
+  --card-foreground: #efe7d8;
+  --popover: #25201b;
+  --popover-foreground: #efe7d8;
+
+  --primary: #4e8c77;
+  --primary-foreground: #1c1815;
+  --secondary: #2e2823;
+  --secondary-foreground: #efe7d8;
+  --muted: #2e2823;
+  --muted-foreground: #a89b8b;
+  --accent: #3a322b;
+  --accent-foreground: #efe7d8;
+  --destructive: #c76b78;
+  --destructive-foreground: #1c1815;
+
+  --border: #3a322b;
+  --input: #3a322b;
+  --ring: #4e8c77;
+
+  --chart-1: #4e8c77;
+  --chart-2: #d89b4a;
+  --chart-3: #c76b78;
+  --chart-4: #a1a1aa;
+  --chart-5: #b89b6e;
+
+  --sidebar: #211c18;
+  --sidebar-foreground: #efe7d8;
+  --sidebar-primary: #4e8c77;
+  --sidebar-primary-foreground: #1c1815;
+  --sidebar-accent: #3a322b;
+  --sidebar-accent-foreground: #efe7d8;
+  --sidebar-border: #3a322b;
+  --sidebar-ring: #4e8c77;
 }
 
-body {
-  margin: 0;
-}
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
 
-.app-shell {
-  max-width: 640px;
-  margin: 4rem auto;
-  padding: 0 1.5rem;
-  line-height: 1.6;
-}
+  html {
+    @apply scroll-smooth;
+  }
 
-.muted {
-  color: #888;
-}
-
-code {
-  background: rgba(127, 127, 127, 0.15);
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-}
-
-/* ---- 表单 / 认证页 ---- */
-.auth-shell {
-  max-width: 360px;
-  margin: 4rem auto;
-  padding: 0 1.5rem;
-  line-height: 1.6;
-}
-
-.auth-shell form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.9rem;
-}
-
-.field-label {
-  color: #555;
-}
-
-.field input {
-  padding: 0.5rem 0.6rem;
-  font-size: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-}
-
-.field-error,
-.error {
-  color: #c0392b;
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-button {
-  padding: 0.55rem 1rem;
-  font-size: 1rem;
-  cursor: pointer;
-  border: 1px solid #888;
-  border-radius: 6px;
-  background: #f5f5f5;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    margin: 0;
+    line-height: 1.6;
+  }
 }

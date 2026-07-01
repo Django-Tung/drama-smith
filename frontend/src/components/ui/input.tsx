@@ -1,0 +1,30 @@
+import * as React from 'react'
+
+import { cn } from '@/utils/cn'
+
+/**
+ * 文本输入。
+ * 用 forwardRef:React 18 下函数组件不会透传 `ref`,而 React Hook Form 的
+ * `register()` 依赖 ref 挂载字段——必须显式转发,否则表单取不到值。
+ */
+const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<'input'>>(function Input(
+  { className, type, ...props },
+  ref,
+) {
+  return (
+    <input
+      type={type}
+      ref={ref}
+      data-slot="input"
+      className={cn(
+        'h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30',
+        'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+        'aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40',
+        className,
+      )}
+      {...props}
+    />
+  )
+})
+
+export { Input }

@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url'
 
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 
 // 开发期 dev 代理的后端源(后端默认起在 :8000,见 backend/src/drama_smith/main.py)。
@@ -8,7 +9,7 @@ import { defineConfig } from 'vite'
 const BACKEND_URL = 'http://localhost:8000'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [tailwindcss(), react()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
