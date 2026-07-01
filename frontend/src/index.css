@@ -1,0 +1,88 @@
+:root {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    sans-serif;
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app-shell {
+  max-width: 640px;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+  line-height: 1.6;
+}
+
+.muted {
+  color: #888;
+}
+
+code {
+  background: rgba(127, 127, 127, 0.15);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+/* ---- 表单 / 认证页 ---- */
+.auth-shell {
+  max-width: 360px;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+  line-height: 1.6;
+}
+
+.auth-shell form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.field-label {
+  color: #555;
+}
+
+.field input {
+  padding: 0.5rem 0.6rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.field-error,
+.error {
+  color: #c0392b;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+button {
+  padding: 0.55rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+  border: 1px solid #888;
+  border-radius: 6px;
+  background: #f5f5f5;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

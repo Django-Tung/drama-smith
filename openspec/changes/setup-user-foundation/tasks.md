@@ -52,19 +52,19 @@
 
 ## 7. 前端工程骨架(`frontend/`)
 
-- [ ] 7.1 在 `frontend/` 下初始化 Vite + React + TS(Node 22);`frontend/package.json`、`tsconfig`(strict)、`vite.config.ts`(代理 `/api`、`/ws` 到后端)
-- [ ] 7.2 配置 ESLint + Prettier;建目录 `frontend/src/{routes,components,features,api,realtime,stores,hooks,types,utils}`
-- [ ] 7.3 `frontend/src/types/`:与后端契约对齐的 TS 类型(`User`、`AuthTokens`、`ApiError` 等)
-- [ ] 7.4 `frontend/src/api/client.ts`:fetch 封装(基址、`Authorization` 头、解包 `{data,meta}`、抛 `ApiError`)
-- [ ] 7.5 `frontend/src/api/endpoints.ts`:auth `register`/`login`/`logout`/`refresh`、`getMe`
+- [x] 7.1 在 `frontend/` 下初始化 Vite + React + TS(Node 22);`frontend/package.json`、`tsconfig`(strict)、`vite.config.ts`(代理 `/api`、`/ws` 到后端)
+- [x] 7.2 配置 ESLint + Prettier;建目录 `frontend/src/{routes,components,features,api,realtime,stores,hooks,types,utils}`
+- [x] 7.3 `frontend/src/types/`:与后端契约对齐的 TS 类型(`User`、`AuthTokens`、`ApiError` 等)
+- [x] 7.4 `frontend/src/api/client.ts`:fetch 封装(基址、`Authorization` 头、解包 `{data,meta}`、抛 `ApiError`)
+- [x] 7.5 `frontend/src/api/endpoints.ts`:auth `register`/`login`/`logout`/`refresh`、`getMe`
 
 ## 8. 前端认证实现
 
-- [ ] 8.1 `frontend/src/stores/auth.ts`(Zustand):access→`localStorage`、refresh→内存/`sessionStorage` 分层存储;`login`/`logout` actions
-- [ ] 8.2 `frontend/src/api/client.ts`:401 自动刷新拦截(调 `/refresh`)+ 并发刷新去重(共享单次 Promise)+ 重试原请求
-- [ ] 8.3 `frontend/src/routes`:登录页、注册页(React Hook Form + Zod,校验规则对齐后端)
-- [ ] 8.4 React Router 路由 + `RequireAuth` 守卫(无 token 且刷新失败 → 重定向 `/login`)
-- [ ] 8.5 验证:`cd frontend && npm run dev` 跑通注册 → 登录 → 受保护页 → 登出;access 过期触发自动刷新
+- [x] 8.1 `frontend/src/stores/auth.ts`(Zustand):access→`localStorage`、refresh→内存/`sessionStorage` 分层存储;`login`/`logout` actions
+- [x] 8.2 `frontend/src/api/client.ts`:401 自动刷新拦截(调 `/refresh`)+ 并发刷新去重(共享单次 Promise)+ 重试原请求
+- [x] 8.3 `frontend/src/routes`:登录页、注册页(React Hook Form + Zod,校验规则对齐后端)
+- [x] 8.4 React Router 路由 + `RequireAuth` 守卫(无 token 且刷新失败 → 重定向 `/login`)
+- [x] 8.5 验证:`cd frontend && npm run dev` 跑通注册 → 登录 → 受保护页 → 登出;access 过期触发自动刷新
 
 ## 9. 联调与收尾
 
