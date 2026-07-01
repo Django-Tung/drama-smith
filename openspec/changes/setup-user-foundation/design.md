@@ -48,6 +48,15 @@ drama-smith 已决定采用前后端分离的 Web 架构(FastAPI 后端 + React 
 
 **D10 monorepo:前后端同仓(`backend/` + `frontend/`)。** 后端 `backend/`(uv + Python 包 `drama_smith`,src layout)、前端 `frontend/`(npm + Vite),各自独立工具链与依赖,同仓便于联调与契约对齐。**取代** [`architecture.md §4.4`](../../../docs/tech-solution/architecture.md) 早先的「非 monorepo、前端独立工程」决策——该决策被本轮调整推翻;相应同步更新 tech-solution 各篇与 `system-architecture.md`。*替代*:分仓(前端独立仓库,更解耦但联调/契约同步成本高)、单包(前后端混在同一目录,工具链互相污染)。同仓 + 各自子目录为本期最优。
 
+**D11 DB 引擎/会话以懒工厂暴露,对齐 `core/config` 的 `get_settings`/`override_settings` 模式。** `db/base.py` 暴露 `get_engine()`(按 `settings.database_url` 建并 memoize 的 `create_async_engine`,`pool_pre_ping=True`、`pool_recycle` 防 MySQL `wait_timeout`)与 `get_session_factory()`(`async_sessionmaker`);`get_session` 依赖与 Alembic `env.py` 复用同一工厂;`lifespan` 调 `get_engine()` 后负责 `await engine.dispose()`。*替代*:模块级 `engine = create_async_engine(...)`(导入即建、测试难改 DB,与阶段六临时库/testcontainers 冲突)、`backend.md §3` 伪码的 `app.state.engine`(生命周期最干净,但 `get_session` 需从 `request.app.state` 取 factory、Alembic 须另起 engine)。懒工厂使阶段六集成测试可经 `override_settings` 重定向到临时库而无需 monkeypatch 模块全局。
+
+**D12 ORM 模型约定(对齐 [`database.md §1`](../../../docs/tech-solution/database.md),逐条落实以免迁移偏移)。** ① **主键 `BIGINT UNSIGNED`** —— `Mapped[int]` + `BigInteger().with_variant(mysql.BIGINT(unsigned=True), "mysql")`、`autoincrement=True`;**外键列类型必须一致**(尤其 `refresh_tokens.user_id`,不一致 MySQL 建表即报错)。② **每表显式 `__table_args__ = {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_0900_ai_ci"}`**(DSN 的 `charset=utf8mb4` 只管连接编码,不管表/列)。③ **时间戳 `DATETIME(3)` 存 naive-UTC**:`created_at`/`updated_at` 用 `mysql.DATETIME(fsp=3)` + `server_default=func.now()`;`updated_at` 配 **MySQL `ON UPDATE CURRENT_TIMESTAMP`**(SQLAlchemy 的 `onupdate=` 仅 ORM 客户端触发,裸 SQL 不更新)。④ **`Base.metadata.naming_convention`** 设约定,保证 autogenerate 产出的约束/索引名稳定、可复现。
+
+**D13 Alembic 迁移接线。** `alembic.ini` 置 `backend/`、`script_location = src/drama_smith/migrations`;`env.py` 先把 `src` 加入 `sys.path` 再 import 包,采用 Alembic **async 模板**(`connectable.run_sync(do_run_migrations)`,因驱动为 asyncmy);`target_metadata = Base.metadata` **之前必须 import 全部模型**(`db/models/__init__.py` 统一 re-export),否则 `--autogenerate` 出空迁移。初始迁移建 `users` + `refresh_tokens` 两表;版本文件入 git。**实现备忘**:
+① autogenerate 的 `downgrade` 在 MySQL 上会先 `drop_index` 再 `drop_table`,被外键占用的索引单独 drop 会触发 **MySQL 1553**;生成的迁移须手工删去 `drop_table` 前冗余的 `drop_index`(`drop_table` 级联删索引/外键)—— 后续域凡 `user_id` 索引 + FK 的表同此处理。② 迁移目录须含 `script.py.mako` 模板(`alembic init` 自动生成;本仓库手建目录,需补此文件,否则 revision 阶段报 `FileNotFoundError`)。
+
+**D14 事务边界在 services 层;`get_session` 仅 `yield` 会话 + `close()`,不 commit/rollback。** `get_session`(`async with session_factory() as session: yield session`)只负责会话生命周期;提交/回滚由阶段四/五的 services 用例在用例边界显式控制。依赖层若擅自 commit 会与 services 抢事务边界、引发阶段五返工。
+
 ## Risks / Trade-offs
 
 - **[access token 存 localStorage 易受 XSS 窃取]** → access 短时(15min)+ 收敛 XSS 面(CSP/转义/限第三方脚本)+ refresh 不入 localStorage;可接受(与 [`user-auth §5`](../../../docs/requirements/features/user-auth.md) 决策一致)。
@@ -55,6 +64,7 @@ drama-smith 已决定采用前后端分离的 Web 架构(FastAPI 后端 + React 
 - **[无状态 access 无法即时吊销]** → 短时 15min + refresh 可吊销;登出即吊销 refresh,最多等 access 过期。本期不上 JWT 黑名单。
 - **[按账号锁定可被恶意触发锁定他人账号(账号 DoS)]** → 本期无邮箱,无法完全解决;属已接受的权衡(需求侧已裁定,见 [`user-auth §5/§6`](../../../docs/requirements/features/user-auth.md))。
 - **[Alembic 初始迁移依赖可用 MySQL]** → 本地/CI 用 docker-compose 起 MySQL 8,迁移在测试前自动 `alembic upgrade head`。
+- **[阶段二验证(2.6)当前指向外部 MySQL]** → `.env` 的 `DS_DATABASE_URL` 指向外部 MySQL(`drama_smith` 库已建空);`alembic upgrade head` / `downgrade base` 在其上可逆、安全。集成测试用的 testcontainers/临时库延后至阶段六,届时经 `override_settings` 重定向(见 D11)。
 - **[monorepo 前后端工具链混杂]** → 各自子目录 + 独立锁文件(`backend/uv.lock`、`frontend/package-lock.json`);根目录只放文档与 docker-compose,不引入跨端耦合。
 
 ## Migration Plan

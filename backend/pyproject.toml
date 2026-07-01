@@ -41,6 +41,8 @@ packages = ["src/drama_smith"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+# Alembic env.py/versions 为生成式基础设施脚本,单独放行。
+extend-exclude = ["src/drama_smith/migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "S", "C4"]
@@ -58,6 +60,8 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 packages = ["drama_smith", "tests"]
+# Alembic env.py/versions 依赖大量 alembic 动态代理,不入严格类型检查。
+exclude = ["src/drama_smith/migrations/"]
 
 [[tool.mypy.overrides]]
 # asyncmy 暂无类型存根

@@ -14,12 +14,12 @@
 
 ## 2. 数据库层(MySQL + SQLAlchemy 2.0 async + Alembic)
 
-- [ ] 2.1 `backend/src/drama_smith/db/base.py`:Declarative Base + async 引擎/会话工厂(`create_async_engine`、`async_sessionmaker`、`pool_pre_ping`),字符集 utf8mb4
-- [ ] 2.2 `backend/src/drama_smith/db/session.py`:`get_session` 异步依赖(请求级会话)
-- [ ] 2.3 `backend/src/drama_smith/db/models/users.py`:字段对齐 [`database.md §3.1`](../../../docs/tech-solution/database.md)(id、username UNIQUE、password_hash、failed_login_count、locked_until、last_login_at、created_at/updated_at)
-- [ ] 2.4 `backend/src/drama_smith/db/models/refresh_tokens.py`:user_id FK+索引、token_hash UNIQUE、expires_at 索引、revoked_at、created_at
-- [ ] 2.5 初始化 Alembic(`backend/alembic.ini`、`backend/src/drama_smith/migrations/env.py` 配置 async + metadata),生成初始迁移建 `users` + `refresh_tokens`
-- [ ] 2.6 验证:`cd backend && alembic upgrade head` 建表成功;`alembic downgrade base` 可回滚(临时 MySQL)
+- [x] 2.1 `backend/src/drama_smith/db/base.py`:Declarative Base + async 引擎/会话工厂(`create_async_engine`、`async_sessionmaker`、`pool_pre_ping`),字符集 utf8mb4
+- [x] 2.2 `backend/src/drama_smith/db/session.py`:`get_session` 异步依赖(请求级会话)
+- [x] 2.3 `backend/src/drama_smith/db/models/users.py`:字段对齐 [`database.md §3.1`](../../../docs/tech-solution/database.md)(id、username UNIQUE、password_hash、failed_login_count、locked_until、last_login_at、created_at/updated_at)
+- [x] 2.4 `backend/src/drama_smith/db/models/refresh_tokens.py`:user_id FK+索引、token_hash UNIQUE、expires_at 索引、revoked_at、created_at
+- [x] 2.5 初始化 Alembic(`backend/alembic.ini`、`backend/src/drama_smith/migrations/env.py` 配置 async + metadata),生成初始迁移建 `users` + `refresh_tokens`
+- [x] 2.6 验证:`cd backend && alembic upgrade head` 建表成功;`alembic downgrade base` 可回滚(临时 MySQL)
 
 ## 3. 配置与安全原语
 
