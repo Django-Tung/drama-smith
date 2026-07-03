@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from drama_smith.api.auth import router as auth_router
 from drama_smith.api.health import router as health_router
 from drama_smith.api.me import router as me_router
+from drama_smith.api.models import router as models_router
 from drama_smith.core.config import get_settings
 from drama_smith.core.errors import register_exception_handlers
 from drama_smith.db.base import dispose_engine, get_engine
@@ -26,6 +27,7 @@ _OPENAPI_TAGS: list[dict[str, str]] = [
     {"name": "health", "description": "健康检查 / 探活(无鉴权)。"},
     {"name": "auth", "description": "用户注册、登录、登出与令牌刷新。"},
     {"name": "users", "description": "当前用户信息。"},
+    {"name": "models", "description": "BYOK 模型配置(文本/图片/视频):CRUD、激活、零成本自检。"},
 ]
 
 _APP_DESCRIPTION = (
@@ -74,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api")
     app.include_router(auth_router, prefix="/api")
     app.include_router(me_router, prefix="/api")
+    app.include_router(models_router, prefix="/api")
     return app
 
 

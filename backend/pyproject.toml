@@ -17,6 +17,8 @@ dependencies = [
     "argon2-cffi>=23.1",
     "pyjwt>=2.10",
     "cryptography>=43.0",
+    "litellm>=1.55",
+    "httpx>=0.28",
 ]
 
 [dependency-groups]
@@ -49,7 +51,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "S", "C4"]
 
 [tool.ruff.lint.per-file-ignores]
 # 测试中允许 assert 与硬编码的测试口令(均为虚构值,非真实凭证)
-"tests/*" = ["S101", "S105", "S107"]
+"tests/*" = ["S101", "S105", "S106", "S107"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -64,8 +66,8 @@ packages = ["drama_smith", "tests"]
 exclude = ["src/drama_smith/migrations/"]
 
 [[tool.mypy.overrides]]
-# asyncmy 暂无类型存根
-module = ["asyncmy.*"]
+# asyncmy / litellm 暂无(完整)类型存根
+module = ["asyncmy.*", "litellm.*"]
 ignore_missing_imports = true
 
 # ---- pytest ----

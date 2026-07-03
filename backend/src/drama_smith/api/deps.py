@@ -17,7 +17,7 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from drama_smith.core.config import get_settings
+from drama_smith.core.config import get_mek, get_settings
 from drama_smith.core.errors import Locked, Unauthenticated
 from drama_smith.core.security import create_access_token, verify_access_token
 from drama_smith.db.base import utcnow
@@ -54,6 +54,14 @@ def get_security() -> Security:
         secret=settings.jwt_secret.get_secret_value(),
         access_ttl_seconds=settings.jwt_access_ttl_seconds,
     )
+
+
+def get_crypto() -> bytes:
+    """FastAPI 依赖:返回 MEK(base64 解码后的 32B,读 `DS_MEK`)。
+
+    service 层据此解密/封存 API Key;支持测试期 `override_settings`。明文 MEK 不入 OpenAPI / 日志。
+    """
+    return get_mek()
 
 
 async def get_current_user(

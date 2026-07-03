@@ -77,6 +77,41 @@ class Locked(DomainError):
     default_message = "Account is temporarily locked due to repeated failed logins"
 
 
+class ModelNotConfigured(DomainError):
+    """用户尚无 active 文本配置,无法执行依赖模型的操作(409)。
+
+    本期不被任何端点触发(预留);M2 分析 service 经 `require_active_text` 调用。
+    """
+
+    code = "model_not_configured"
+    status_code = 409
+    default_message = "No active text model configuration; please configure one first"
+
+
+class ProviderAuthFailed(DomainError):
+    """供应商鉴权失败(401/403):API Key 无效或已失效(502,并置 `status=invalid`)。"""
+
+    code = "provider_auth_failed"
+    status_code = 502
+    default_message = "Provider rejected the API key (authentication failed)"
+
+
+class RateLimited(DomainError):
+    """供应商限流 / 超时,有限重试后仍失败(provider 429 / timeout → 502)。"""
+
+    code = "rate_limited"
+    status_code = 502
+    default_message = "Provider rate-limited or timed out"
+
+
+class QuotaExceeded(DomainError):
+    """用户并发 / 配额超限(429;执行器配额门,M2+ 触发,本期仅定义)。"""
+
+    code = "quota_exceeded"
+    status_code = 429
+    default_message = "Concurrency or quota limit reached"
+
+
 # HTTP 状态 → 错误码兜底映射。主要服务 FastAPI/Starlette 自身抛出的 `HTTPException`,
 # 例如 OAuth2 缺失令牌的 401、未匹配路由的 404;未列出的 5xx 归 `internal_error`。
 _STATUS_TO_CODE: dict[int, str] = {
@@ -86,7 +121,11 @@ _STATUS_TO_CODE: dict[int, str] = {
     409: "conflict",
     422: "validation_error",
     423: "locked",
+    429: "rate_limited",
     500: "internal_error",
+    502: "bad_gateway",
+    503: "service_unavailable",
+    504: "gateway_timeout",
 }
 
 
@@ -164,7 +203,11 @@ __all__ = [
     "Conflict",
     "DomainError",
     "Locked",
+    "ModelNotConfigured",
     "NotFound",
+    "ProviderAuthFailed",
+    "QuotaExceeded",
+    "RateLimited",
     "Unauthenticated",
     "register_exception_handlers",
 ]
