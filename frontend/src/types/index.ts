@@ -7,3 +7,14 @@ export type {
   TokenPairResponse,
   User,
 } from './auth'
+export type {
+  ImageProvider,
+  ModelConfig,
+  ModelConfigCreate,
+  ModelConfigUpdate,
+  ModelPurpose,
+  ModelStatus,
+  Provider,
+  TextProvider,
+  VideoProvider,
+} from './models'

@@ -22,6 +22,8 @@ interface AuthState {
   setSession: (tokens: TokenPairResponse, user?: User) => void
   setAccessToken: (token: string) => void
   setUser: (user: User) => void
+  /** 重新拉取 /api/me 刷新当前用户(含 text_model_configured)。 */
+  refreshUser: () => Promise<void>
   clear: () => void
   /** 登录:调 /api/auth/login 并落地令牌;失败抛 ApiError。 */
   login: (credentials: LoginRequest) => Promise<TokenPairResponse>
@@ -51,6 +53,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setUser(user) {
     set({ user })
+  },
+
+  /** 重新拉取 /api/me;供向导 / 设置页变更后同步 text_model_configured。 */
+  async refreshUser() {
+    const me = await authApi.getMe()
+    set({ user: me })
   },
 
   clear() {

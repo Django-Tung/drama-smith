@@ -8,10 +8,9 @@ import {
   Settings,
   User as UserIcon,
 } from 'lucide-react'
-import { useEffect, type ComponentType } from 'react'
+import { type ComponentType } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
-import { authApi } from '@/api/endpoints'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,24 +42,14 @@ const NAV: NavItemDef[] = [
 
 /**
  * 受保护区应用骨架(frontend.md §3):侧栏导航 + 顶栏(主题/用户菜单)+ 内容 Outlet。
- * 挂载时拉取 /api/me 写入 auth.user(access 过期由 client 透明刷新);登出复用 auth.logout。
+ * user 由 `RequireAuth` 预加载;此处仅读 auth.user 显示。登出复用 auth.logout。
  */
 export function AppShell() {
   const navigate = useNavigate()
-  const setUser = useAuthStore((s) => s.setUser)
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const collapsed = useUiStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
-
-  useEffect(() => {
-    authApi
-      .getMe()
-      .then(setUser)
-      .catch(() => {
-        /* 进 AppShell 前已由 RequireAuth 保证有效会话;此处失败(刷新也败)忽略,顶栏显示占位。 */
-      })
-  }, [setUser])
 
   const onLogout = async () => {
     await logout()

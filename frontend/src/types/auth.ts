@@ -7,7 +7,7 @@
 export interface User {
   id: number
   username: string
-  /** 是否已配置文本模型(本期恒为 false,FR-C1 完成度占位)。 */
+  /** 是否已配置 active 文本模型(setup-byok-config:`has_active_text` 真值,前端据此路由向导)。 */
   text_model_configured: boolean
 }
 

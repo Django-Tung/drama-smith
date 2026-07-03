@@ -1,6 +1,10 @@
 import type {
   AccessTokenResponse,
   LoginRequest,
+  ModelConfig,
+  ModelConfigCreate,
+  ModelConfigUpdate,
+  ModelPurpose,
   RefreshRequest,
   RegisterRequest,
   TokenPairResponse,
@@ -52,5 +56,50 @@ export const authApi = {
   /** 当前用户信息 + 文本模型配置完成度(GET /api/me)。 */
   getMe(): Promise<User> {
     return request<User>('/api/me')
+  },
+}
+
+/**
+ * BYOK 模型配置端点(architecture.md §3.3,setup-byok-config)。
+ * 对齐 `/api/me/models/...`;响应仅脱敏 key(`api_key_masked`),明文 key 只在
+ * create / update 请求体中,经 `request` 走标准 401 自动刷新拦截。
+ */
+export const modelsApi = {
+  /** 列出我的模型配置(仅脱敏 key);`purpose` 可选过滤。 */
+  list(purpose?: ModelPurpose): Promise<ModelConfig[]> {
+    return request<ModelConfig[]>('/api/me/models', { query: { purpose } })
+  },
+
+  /** 获取单条配置(越权访问 → 404,不泄露存在性)。 */
+  get(id: number): Promise<ModelConfig> {
+    return request<ModelConfig>(`/api/me/models/${id}`)
+  },
+
+  /** 新建:白名单校验 → 信封加密落库 → 首条自动 active,201。 */
+  create(body: ModelConfigCreate): Promise<ModelConfig> {
+    return request<ModelConfig>('/api/me/models', { method: 'POST', body })
+  },
+
+  /** 按 model_fields_set 语义更新(仅传显式字段;缺省 key 不动加密列 D8)。 */
+  update(id: number, body: ModelConfigUpdate): Promise<ModelConfig> {
+    return request<ModelConfig>(`/api/me/models/${id}`, { method: 'PUT', body })
+  },
+
+  /** 删除;删 active 且同 purpose 有兄弟须指定继任 `newActiveId`,否则 409 invalid_state。 */
+  async delete(id: number, newActiveId?: number): Promise<void> {
+    await request<unknown>(`/api/me/models/${id}`, {
+      method: 'DELETE',
+      query: { new_active_id: newActiveId },
+    })
+  },
+
+  /** 激活:单事务内翻转为当前 purpose 的 active(其余翻 0,D3)。 */
+  activate(id: number): Promise<ModelConfig> {
+    return request<ModelConfig>(`/api/me/models/${id}/activate`, { method: 'POST' })
+  },
+
+  /** 零成本自检(GET /models,不真生成);鉴权失败(401/403)置 invalid + 502。 */
+  test(id: number): Promise<ModelConfig> {
+    return request<ModelConfig>(`/api/me/models/${id}/test`, { method: 'POST' })
   },
 }
