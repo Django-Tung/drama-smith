@@ -15,7 +15,7 @@
 | **时间戳** | 统一 `created_at`/`updated_at`(`DATETIME(3)`,UTC);可清理资源带 `deleted_at`(软删,见 §5)。 |
 | **字符集** | 库/表/列 `utf8mb4`、`utf8mb4_0900_ai_ci`;`VARCHAR` 长度按字段语义定。 |
 | **结构化产物** | 整体读写、不单独查询的(分析四维、provider_options、params、task 快照)用 `JSON`;**需单独 CRUD/编辑/排序/选用的**(分镜、媒体)拆为独立表(见 §7)。 |
-| **加密字段** | API Key 信封加密:密文 + IV + DEK 密文三列(见 §6);明文永不落库。 |
+| **加密字段** | API Key 信封加密:两个自包含 blob(`api_key_ciphertext`/`dek_ciphertext`)+ 脱敏串 `api_key_masked`(见 §6);明文永不落库。 |
 | **布尔/枚举** | 枚举用 `ENUM`(值集稳定)或 `VARCHAR`(值集可能扩展,如 provider);布尔用 `TINYINT(1)`。 |
 | **外键** | 物理外键约束开启(`ON DELETE` 按语义);用户隔离的归属校验同时在应用层把关。 |
 
@@ -89,9 +89,9 @@
 | provider | VARCHAR(64) | NOT NULL | 供应商(白名单,[ai-config §2.1](../requirements/features/ai-config.md)) |
 | model | VARCHAR(128) | NOT NULL | 模型标识 |
 | base_url | VARCHAR(512) | NULL | 自部署/网关 |
-| api_key_ciphertext | VARBINARY(512) | NOT NULL | AES-256-GCM 密文(§6) |
-| api_key_iv | VARBINARY(12) | NOT NULL | GCM nonce(12B) |
-| dek_ciphertext | VARBINARY(512) | NOT NULL | 数据密钥经 MEK 加密(§6) |
+| api_key_ciphertext | VARBINARY(512) | NOT NULL | DEK 加密明文 Key 的自包含 blob `nonce‖ct‖tag`(§6,A2) |
+| dek_ciphertext | VARBINARY(512) | NOT NULL | MEK 加密 DEK 的自包含 blob `nonce‖ct‖tag`(信封,§6) |
+| api_key_masked | VARCHAR(32) | NOT NULL | 脱敏串(写时落库,读路径不碰 MEK,m2) |
 | params | JSON | NULL | 调用默认参数(text:temp/max_tokens;image:size/quality/n;video:duration/resolution/aspect) |
 | provider_options | JSON | NULL | 扩展字段(Azure endpoint/api_version/deployment 等) |
 | is_active | TINYINT(1) | NOT NULL DEFAULT 0 | 该用途当前生效(每用户每用途恰一条 active,见下方约束) |
@@ -287,11 +287,11 @@
 
 承接 [architecture §4.5](../architecture/system-architecture.md) 与 [ai-config §6](../requirements/features/ai-config.md):
 
-- **主密钥 MEK**:经环境变量(`DS_MEK`,base64)注入,**不入库、不入日志**;生产建议接 KMS。
-- **每条配置一个 DEK**:随机生成 `data_key`;用 DEK 经 **AES-256-GCM** 加密 API Key → `api_key_ciphertext` + `api_key_iv`(12B nonce)+ GCM tag。
-- **DEK 落库**:DEK 经 MEK 加密 → `dek_ciphertext`(信封);读出时 MEK 解 DEK、DEK 解密文。
-- **轮换**:换 MEK 时遍历解密→用新 MEK 重封 DEK(API Key 密文不动)。
-- **脱敏**:列表/日志仅回显 `sk-…ab12`(前缀 + 末 4 位)。
+- **主密钥 MEK**:经环境变量(`DS_MEK`,base64 32B)注入,**不入库、不入日志**;生产建议接 KMS。
+- **每条配置一个 DEK**:随机生成 `data_key`;用 DEK 经 **AES-256-GCM** 加密 API Key → **自包含 blob** `nonce‖ct‖tag`(`api_key_ciphertext`,无单独 iv 列,A2)。
+- **DEK 落库**:DEK 经 MEK 加密 → **自包含 blob** `nonce‖ct‖tag`(`dek_ciphertext`,信封);读出时 MEK 解 DEK、DEK 解密文。
+- **脱敏**:`api_key_masked`(`sk-…ab12`,前 3 + 末 4)写时落库;列表/读路径不解密、不碰 MEK(m2)。
+- **轮换**:换 MEK 时遍历解密→用新 MEK 重封 `dek_ciphertext`(`api_key_ciphertext` 不动)。
 
 ---
 
@@ -316,7 +316,7 @@
 - **初始 schema**:M0 里程碑建立 users/refresh_tokens/model_configs;后续里程碑按域增量建表(dramas/episodes/scripts → analyses/shots → media → tasks)。
 - **数据迁移**:结构变更与数据回填分离;生成列、唯一索引等需在迁移中显式处理(尤其 `model_configs.active_key`)。
 - **回滚**:downgrade 仅用于开发期;生产变更走向前迁移 + 兼容期(新增列先加后用、删除列先停用后删)。
-- **测试库**:CI 用临时 MySQL(testcontainers 或 docker-compose)跑迁移验证。
+- **测试库**:统一走 env 配置(`DS_DATABASE_URL`/`DS_TEST_DATABASE_URL`);session 夹具自动建 `<db>_test` 库并跑迁移,CI / 本地同源(不另起 testcontainers / docker-compose)。
 
 ---
 

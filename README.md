@@ -43,11 +43,12 @@ cd backend
 cp .env.example .env
 #    DS_DATABASE_URL=mysql+asyncmy://USER:PASSWORD@HOST:3306/drama_smith?charset=utf8mb4
 #    DS_JWT_SECRET=$(openssl rand -base64 48)   # 生产务必替换为安全随机值
+#    DS_MEK=$(openssl rand -base64 32)          # BYOK 信封加密主密钥(base64 32B),务必离线备份!
 
-# 2. 安装依赖
+# 2. 安装依赖(含 cryptography、litellm —— BYOK 信封加密 / 供应商无关调用)
 uv sync
 
-# 3. 建表(初始迁移建 users + refresh_tokens)
+# 3. 建表(迁移建 users / refresh_tokens / model_configs)
 uv run alembic upgrade head
 
 # 4. 起开发服务(默认 :8000)
@@ -57,6 +58,7 @@ uv run uvicorn drama_smith.main:app --reload
 - 健康检查:`GET http://localhost:8000/api/health`
 - Swagger UI:`http://localhost:8000/docs`(OpenAPI:`/openapi.json`)
 - 认证 API:`POST /api/auth/{register,login,refresh,logout}`、`GET /api/me`
+- BYOK 模型配置:`/api/me/models`(CRUD / activate / 零成本自检);登录后前端据 `text_model_configured` 路由到 `/setup` 向导
 
 质量门:
 
@@ -89,6 +91,7 @@ yarn dev                   # 默认 :5173,Vite 代理 /api 与 /ws 到后端 :80
 | `DS_JWT_SECRET` | JWT 签名密钥(生产强制覆盖) | 开发兜底值 |
 | `DS_JWT_ACCESS_TTL_SECONDS` | 访问令牌有效期 | `900`(15min) |
 | `DS_REFRESH_TTL_DAYS` | 刷新令牌有效期 | `7` |
+| `DS_MEK` | BYOK 信封加密主密钥(base64 32B;`openssl rand -base64 32`,务必离线备份) | —(必填) |
 | `DS_LOGIN_MAX_FAILURES` | 登录连续失败上限 | `5` |
 | `DS_LOGIN_LOCK_MINUTES` | 账号锁定时长 | `15` |
 | `DS_CORS_ORIGINS` | 允许来源(逗号分隔) | `http://localhost:5173` |

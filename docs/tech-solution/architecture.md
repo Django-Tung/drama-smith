@@ -308,7 +308,7 @@ drama-smith/                  # monorepo(前后端同仓)
 │       ├── storage/          # FileStore 抽象 + 本地磁盘实现
 │       ├── db/               # SQLAlchemy 模型 · 异步会话/引擎 · 仓储层(强制 user_id 过滤)
 │       └── migrations/       # Alembic(env.py + versions/)
-│   └── tests/                # pytest(+cov):单元/集成(含临时 MySQL 或 testcontainers)
+│   └── tests/                # pytest(+cov):单元/集成(MySQL 经 env 配置 DS_DATABASE_URL 注入)
 ├── frontend/                 # 前端(React + Vite),结构见 §6.2 / frontend.md
 ├── docs/ · openspec/
 └── (generation/ simulation/  # 推迟,仅保留结构位,本期不实现)

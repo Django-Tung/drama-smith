@@ -228,24 +228,31 @@ class FileStore(Protocol):
 承接 [database.md §6](./database.md):
 
 ```python
-def encrypt(plaintext: str, mek: bytes) -> Envelope:    # -> (ciphertext, iv, dek_ciphertext)
+def _seal(key: bytes, data: bytes) -> bytes:            # 自包含 blob = nonce‖ct‖tag
+    nonce = os.urandom(12)                               # GCM 推荐 96-bit nonce
+    return nonce + AESGCM(key).encrypt(nonce, data, None)
+def _open(key: bytes, blob: bytes) -> bytes:             # 拆 12B nonce 后解密(验 tag)
+    nonce, ct = blob[:12], blob[12:]
+    return AESGCM(key).decrypt(nonce, ct, None)
+def encrypt(plaintext: str, mek: bytes) -> Envelope:    # -> (key_blob, dek_blob)
     dek = os.urandom(32)
-    ct, iv = aes_gcm_encrypt(dek, plaintext.encode())    # 用 DEK 加密明文
-    dek_ct = aes_gcm_encrypt(mek, dek)                    # 用 MEK 封 DEK
-    return Envelope(ct, iv, dek_ct)
+    return Envelope(
+        key_blob=_seal(dek, plaintext.encode()),         # DEK 加密明文 Key
+        dek_blob=_seal(mek, dek),                        # MEK 封 DEK(信封)
+    )
 def decrypt(env: Envelope, mek: bytes) -> str:
-    dek = aes_gcm_decrypt(mek, env.dek_ct)
-    return aes_gcm_decrypt(dek, env.ct).decode()
+    dek = _open(mek, env.dek_blob)
+    return _open(dek, env.key_blob).decode()
 ```
 
-- MEK 来自 `Settings.ds_mek`(env),不入库/日志/OpenAPI;`model_configs` 仅存 `Envelope` 三列。
-- 展示脱敏:`mask(key) = key[:3] + "…" + key[-4:]`。
+- MEK 经 `get_mek()` 读 `Settings.mek`(env `DS_MEK`,base64 32B),不入库/日志/OpenAPI;`model_configs` 存两个**自包含 blob** 列 `api_key_ciphertext`/`dek_ciphertext`(各含 nonce,无单独 iv 列,A2)+ `api_key_masked` 脱敏串(m2)。
+- 展示脱敏:`mask_key(key) = key[:3] + "…" + key[-4:]`(< 8 位回退 `…`);写时落 `api_key_masked`,读路径不碰 MEK、不解密。
 
 ---
 
 ## 10. 配置与错误处理
 
-**配置(`core/config.py`)**:`pydantic-settings.BaseSettings`,字段含 `database_url`、`jwt_secret`、`jwt_access_ttl`(15m)、`refresh_ttl_days`(7)、`ds_mek`、`media_root`、`cors_origins`、`max_tasks_per_user`、`max_global_workers`、`login_max_failures`(5)、`login_lock_minutes`(15)。敏感字段标 `SecretStr`、不入 schema。
+**配置(`core/config.py`)**:`pydantic-settings.BaseSettings`,字段含 `database_url`、`jwt_secret`、`jwt_access_ttl`(15m)、`refresh_ttl_days`(7)、`mek`(env `DS_MEK`,base64 32B)、`media_root`、`cors_origins`、`max_tasks_per_user`、`max_global_workers`、`login_max_failures`(5)、`login_lock_minutes`(15)。敏感字段标 `SecretStr`、不入 schema。
 
 **错误(`core/errors.py` + 全局异常处理)**:领域异常 → [architecture §3.2](./architecture.md) 错误格式。
 
@@ -267,7 +274,7 @@ def decrypt(env: Envelope, mek: bytes) -> str:
 
 - **分层**:`tests/unit`(core/crypto、security、states、prompts、仓储查询)、`tests/integration`(端到端用例、任务执行器、WS)、`tests/llm`(接缝假实现)。
 - **`core/llm` 替身**:测试用 `FakeTextModel`/`FakeImageModel`/`FakeVideoModel`(确定输出),不真调供应商;自检/生成行为用替身验证。
-- **数据库**:CI 用临时 MySQL(testcontainers / docker-compose),先跑 Alembic 迁移再测(验证迁移本身)。
+- **数据库**:MySQL 一律经 env 配置(`DS_DATABASE_URL`/`DS_TEST_DATABASE_URL`)注入;`tests/conftest.py` session 夹具自动 `CREATE DATABASE`(`<db>_test`)+ `alembic upgrade head`,每用例 `TRUNCATE` 隔离(CI / 本地同源,DSN 由环境提供,不另起 testcontainers / docker-compose)。
 - **任务执行器**:用假 LLM + 内存/临时 FileStore,验证状态机、取消、恢复(`recover` 单测)。
 - **隔离用例**:构造两用户数据,断言跨用户访问 404。
 - **质量门**:`ruff check`、`mypy`、`pytest --cov`(核心模块覆盖率阈值)。
