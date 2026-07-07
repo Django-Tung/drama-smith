@@ -19,6 +19,7 @@ dependencies = [
     "cryptography>=43.0",
     "litellm>=1.55",
     "httpx>=0.28",
+    "langgraph>=0.2",
 ]
 
 [dependency-groups]

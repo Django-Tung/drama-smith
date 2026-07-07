@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from types import SimpleNamespace
+from typing import Any
 
 import httpx
+import litellm
 import pytest
+from litellm.exceptions import AuthenticationError, RateLimitError
 
 from drama_smith.core.errors import ProviderAuthFailed, RateLimited
-from drama_smith.llm import ModelConfigSnapshot, ProbeNotSupported, validate_provider
+from drama_smith.llm import ModelConfigSnapshot, ProbeNotSupported, litellm_text, validate_provider
 from drama_smith.llm._probe import probe_models_endpoint
 from drama_smith.llm.base import (
     IMAGE_PROVIDERS,
@@ -123,3 +127,95 @@ async def test_probe_rate_limited_on_timeout() -> None:
 
     with pytest.raises(RateLimited):
         await _probe_with(_timeout)
+
+
+# ---- chat() 映射 + 有界重试(D8)----
+def _resp(content: str = "ok") -> SimpleNamespace:
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+    )
+
+
+class TestLitellmChat:
+    """鉴权失败不重试、限流/超时重试、response_format 透传、耗尽后 RateLimited。"""
+
+    async def test_returns_content(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            return _resp("hello")
+
+        monkeypatch.setattr(litellm, "acompletion", fake)
+        monkeypatch.setattr(litellm_text, "_BASE_DELAY", 0.0)
+        model = LitellmTextModel(_snap("text", "openai"), "k")
+        assert await model.chat([{"role": "user", "content": "hi"}]) == "hello"
+
+    async def test_transmits_response_format_and_params(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            captured.update(kwargs)
+            return _resp()
+
+        monkeypatch.setattr(litellm, "acompletion", fake)
+        monkeypatch.setattr(litellm_text, "_BASE_DELAY", 0.0)
+        model = LitellmTextModel(_snap("text", "openai"), "k")
+        await model.chat(
+            [{"role": "user", "content": "hi"}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        assert captured["response_format"] == {"type": "json_object"}
+        assert captured["temperature"] == 0.2
+        assert captured["model"] == "m"
+
+    async def test_auth_failure_not_retried(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = {"n": 0}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            calls["n"] += 1
+            raise AuthenticationError("bad key", "gpt-4o-mini", "openai")
+
+        monkeypatch.setattr(litellm, "acompletion", fake)
+        monkeypatch.setattr(litellm_text, "_BASE_DELAY", 0.0)
+        model = LitellmTextModel(_snap("text", "openai"), "k")
+        with pytest.raises(ProviderAuthFailed):
+            await model.chat([{"role": "user", "content": "hi"}])
+        assert calls["n"] == 1  # 鉴权失败立即抛,不重试
+
+    async def test_rate_limit_retries_then_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(litellm_text, "_MAX_RETRIES", 3)
+        monkeypatch.setattr(litellm_text, "_BASE_DELAY", 0.0)
+        calls = {"n": 0}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise RateLimitError("slow down", "gpt-4o-mini", "openai")
+            return _resp("ok")
+
+        monkeypatch.setattr(litellm, "acompletion", fake)
+        model = LitellmTextModel(_snap("text", "openai"), "k")
+        assert await model.chat([{"role": "user", "content": "hi"}]) == "ok"
+        assert calls["n"] == 3
+
+    async def test_rate_limit_exhausted_raises_rate_limited(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(litellm_text, "_MAX_RETRIES", 2)
+        monkeypatch.setattr(litellm_text, "_BASE_DELAY", 0.0)
+        calls = {"n": 0}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            calls["n"] += 1
+            raise RateLimitError("slow", "gpt-4o-mini", "openai")
+
+        monkeypatch.setattr(litellm, "acompletion", fake)
+        model = LitellmTextModel(_snap("text", "openai"), "k")
+        with pytest.raises(RateLimited):
+            await model.chat([{"role": "user", "content": "hi"}])
+        assert calls["n"] == 3  # 1 首发 + 2 重试

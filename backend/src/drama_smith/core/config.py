@@ -62,6 +62,12 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173"],
     )
 
+    # ---- 任务执行器并发上限(M2;进程内 asyncio 执行器)----
+    # 每用户并发任务数(超限自然排队 `pending`)、全局协程上限;均经 `DS_` env 可覆盖。
+    # 取值权衡 BYOK 成本:并发越高吞吐越大,但供应商并发/费用同步上升(见 总纲 §6)。
+    max_tasks_per_user: int = 4
+    max_global_workers: int = 8
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_cors_origins(cls, value: Any) -> Any:
