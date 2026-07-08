@@ -14,16 +14,44 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 # ---- 供应商白名单(D12,首发清单,ai-config §2.1)----
-TEXT_PROVIDERS: frozenset[str] = frozenset({
-    "openai", "anthropic", "gemini", "zhipu", "deepseek", "moonshot", "qwen", "doubao", "xai",
-})
-IMAGE_PROVIDERS: frozenset[str] = frozenset({
-    "openai", "seedream", "wanx", "cogview", "flux", "stability", "ideogram",
-})
+TEXT_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "openai",
+        "anthropic",
+        "gemini",
+        "zhipu",
+        "deepseek",
+        "moonshot",
+        "qwen",
+        "doubao",
+        "xai",
+    }
+)
+IMAGE_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "openai",
+        "seedream",
+        "wanx",
+        "cogview",
+        "flux",
+        "stability",
+        "ideogram",
+    }
+)
 # video 首发「列但不实现」:本期仅占位,M3 落具体异步适配器。
-VIDEO_PROVIDERS: frozenset[str] = frozenset({
-    "seedance", "kling", "veo", "wan", "minimax", "runway", "pika", "luma", "sora",
-})
+VIDEO_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "seedance",
+        "kling",
+        "veo",
+        "wan",
+        "minimax",
+        "runway",
+        "pika",
+        "luma",
+        "sora",
+    }
+)
 
 _PROVIDERS_BY_PURPOSE: dict[str, frozenset[str]] = {
     "text": TEXT_PROVIDERS,
@@ -33,6 +61,22 @@ _PROVIDERS_BY_PURPOSE: dict[str, frozenset[str]] = {
 
 # 未显式给 base_url 时的 OpenAI 兼容默认 endpoint(仅 openai 自身可靠;其余 provider 需 base_url)。
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+
+def normalize_base_url(url: str | None) -> str | None:
+    """规整自定义 base_url,供 litellm 接缝统一使用。
+
+    用户在 BYOK 里常填**完整端点**(如 `…/v1/chat/completions`),而 litellm 只要 base
+    (`…/v1`,自己拼 `/chat/completions`)。此处去尾 `/chat/completions` 与多余斜杠;`None` 透传。
+    同时让零成本探测拼出的 `/models` 落在正确路径(否则打到 `…/chat/completions/models` 误报)。
+    """
+    if url is None:
+        return None
+    cleaned = url.strip().rstrip("/")  # 先去尾斜杠,使 /chat/completions/ 也能识别
+    if cleaned.endswith("/chat/completions"):
+        cleaned = cleaned[: -len("/chat/completions")]
+    return cleaned or None
+
 
 _VALID_PURPOSES = frozenset(_PROVIDERS_BY_PURPOSE)
 

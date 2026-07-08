@@ -2,6 +2,10 @@
 
 本期 `probe()` 经 `/models` 零成本探测(自检唯一调用点);`generate()` 为 M2 真实生成,
 声明接缝完整性、本期不被调用。
+
+TODO(M3):`generate()` 给了 `base_url` 时同样需要 `custom_llm_provider="openai"` +
+`normalize_base_url`(与 `litellm_text.py` 5.5 spike 修的同款缺陷);M2 不触达 image,
+留待 M3 引入图片生成时一并修并补测。
 """
 
 from __future__ import annotations

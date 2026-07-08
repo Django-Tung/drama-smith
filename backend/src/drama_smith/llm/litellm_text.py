@@ -25,7 +25,7 @@ from litellm.exceptions import (
 
 from drama_smith.core.errors import ProviderAuthFailed, RateLimited
 from drama_smith.llm._probe import probe_models_endpoint
-from drama_smith.llm.base import ModelConfigSnapshot
+from drama_smith.llm.base import ModelConfigSnapshot, normalize_base_url
 
 # 有界重试(D8):1 次首发 + 3 次重试,指数退避 1s/2s/4s。测试经 monkeypatch 缩短。
 _MAX_RETRIES = 3
@@ -38,6 +38,8 @@ class LitellmTextModel:
     def __init__(self, snapshot: ModelConfigSnapshot, api_key: str) -> None:
         self._snapshot = snapshot
         self._api_key = api_key
+        # 规整 base_url(用户常填完整端点 …/v1/chat/completions → …/v1);chat 与 probe 共用。
+        self._base_url = normalize_base_url(snapshot.base_url)
 
     async def chat(self, messages: Sequence[Mapping[str, str]], **params: Any) -> str:
         kwargs: dict[str, Any] = {
@@ -45,8 +47,12 @@ class LitellmTextModel:
             "messages": list(messages),
             "api_key": self._api_key,
         }
-        if self._snapshot.base_url:
-            kwargs["api_base"] = self._snapshot.base_url
+        if self._base_url:
+            # 自定义 base_url = OpenAI 兼容端点(SiliconFlow / Together 托管的 deepseek 等)。
+            # 显式按 openai 路由,否则 litellm 对陌生模型串报 "LLM Provider NOT provided"
+            # (5.5 spike 复现并验证)。原生 provider(无 base_url)仍由 litellm 按 model 路由。
+            kwargs["api_base"] = self._base_url
+            kwargs["custom_llm_provider"] = "openai"
         kwargs.update(params)  # 透传 response_format / temperature / max_tokens 等
 
         last_exc: Exception | None = None
@@ -69,11 +75,7 @@ class LitellmTextModel:
             # 可重试路径:未耗尽则退避后重试,耗尽则落到末尾统一抛 `RateLimited`。
             if attempt < _MAX_RETRIES:
                 await asyncio.sleep(_BASE_DELAY * (2**attempt))
-        raise RateLimited(
-            f"Provider unavailable after {_MAX_RETRIES + 1} attempts"
-        ) from last_exc
+        raise RateLimited(f"Provider unavailable after {_MAX_RETRIES + 1} attempts") from last_exc
 
     async def probe(self) -> None:
-        await probe_models_endpoint(
-            self._snapshot.base_url, self._api_key, provider=self._snapshot.provider
-        )
+        await probe_models_endpoint(self._base_url, self._api_key, provider=self._snapshot.provider)

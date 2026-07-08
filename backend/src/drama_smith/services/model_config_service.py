@@ -162,9 +162,7 @@ async def update_config(
     return updated
 
 
-async def activate_config(
-    session: AsyncSession, user_id: int, config_id: int
-) -> ModelConfig:
+async def activate_config(session: AsyncSession, user_id: int, config_id: int) -> ModelConfig:
     """置指定配置为当前 active(单事务翻转,D3)→ 提交。"""
     config = await model_config_repo.activate(session, user_id, config_id)
     await session.commit()
@@ -238,6 +236,9 @@ async def test_config(
     except RateLimited:
         await session.commit()
         raise
+    # 成功 / 降级(ProbeNotSupported)→ 复位为 `active`(M1 修复:此前成功后不把 invalid 改回,
+    # 一旦因瞬态被判 invalid 便永不恢复)。瞬态 RateLimited 不改 status(非坏 key)。
+    await model_config_repo.set_status(session, user_id, config_id, "active")
     await session.commit()
     return config
 

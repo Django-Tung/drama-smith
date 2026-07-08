@@ -20,6 +20,7 @@ from drama_smith.llm.base import (
     VIDEO_PROVIDERS,
     ImageModel,
     TextModel,
+    normalize_base_url,
 )
 from drama_smith.llm.factory import build
 from drama_smith.llm.litellm_image import LitellmImageModel
@@ -131,9 +132,7 @@ async def test_probe_rate_limited_on_timeout() -> None:
 
 # ---- chat() 映射 + 有界重试(D8)----
 def _resp(content: str = "ok") -> SimpleNamespace:
-    return SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
-    )
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
 class TestLitellmChat:
@@ -169,9 +168,7 @@ class TestLitellmChat:
         assert captured["temperature"] == 0.2
         assert captured["model"] == "m"
 
-    async def test_auth_failure_not_retried(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_auth_failure_not_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls = {"n": 0}
 
         async def fake(**kwargs: Any) -> SimpleNamespace:
@@ -185,9 +182,7 @@ class TestLitellmChat:
             await model.chat([{"role": "user", "content": "hi"}])
         assert calls["n"] == 1  # 鉴权失败立即抛,不重试
 
-    async def test_rate_limit_retries_then_succeeds(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_rate_limit_retries_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(litellm_text, "_MAX_RETRIES", 3)
         monkeypatch.setattr(litellm_text, "_BASE_DELAY", 0.0)
         calls = {"n": 0}
@@ -219,3 +214,78 @@ class TestLitellmChat:
         with pytest.raises(RateLimited):
             await model.chat([{"role": "user", "content": "hi"}])
         assert calls["n"] == 3  # 1 首发 + 2 重试
+
+
+# ---- base_url 规整 + 自定义 OpenAI 兼容端点路由(5.5 spike 修复)----
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        (None, None),
+        ("https://api.siliconflow.cn/v1/chat/completions", "https://api.siliconflow.cn/v1"),
+        ("https://api.siliconflow.cn/v1/chat/completions/", "https://api.siliconflow.cn/v1"),
+        ("https://api.test/v1", "https://api.test/v1"),
+        ("https://api.test/v1/", "https://api.test/v1"),
+        ("  https://api.test/v1/chat/completions  ", "https://api.test/v1"),
+        ("https://api.test", "https://api.test"),
+    ],
+)
+def test_normalize_base_url(given: str | None, expected: str | None) -> None:
+    assert normalize_base_url(given) == expected
+
+
+class TestBaseUrlRouting:
+    """自定义 base_url = OpenAI 兼容端点 → 显式 `custom_llm_provider="openai"` + 规整 base。
+    无 base_url 的原生 provider 不受影响(由 litellm 按 model 路由)。5.5 spike 复现并验证此修法。"""
+
+    async def test_custom_provider_when_base_url_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            captured.update(kwargs)
+            return _resp()
+
+        monkeypatch.setattr(litellm, "acompletion", fake)
+        monkeypatch.setattr(litellm_text, "_BASE_DELAY", 0.0)
+        snap = ModelConfigSnapshot(
+            purpose="text",
+            provider="deepseek",
+            model="deepseek-ai/DeepSeek-V3.2",
+            base_url="https://api.siliconflow.cn/v1/chat/completions",
+        )
+        model = LitellmTextModel(snap, "k")
+        await model.chat([{"role": "user", "content": "hi"}])
+        assert captured["custom_llm_provider"] == "openai"
+        assert captured["api_base"] == "https://api.siliconflow.cn/v1"  # 规整后
+        assert captured["model"] == "deepseek-ai/DeepSeek-V3.2"
+
+    async def test_native_routing_without_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            captured.update(kwargs)
+            return _resp()
+
+        monkeypatch.setattr(litellm, "acompletion", fake)
+        monkeypatch.setattr(litellm_text, "_BASE_DELAY", 0.0)
+        model = LitellmTextModel(_snap("text", "openai"), "k")  # 无 base_url → 原生路由
+        await model.chat([{"role": "user", "content": "hi"}])
+        assert "custom_llm_provider" not in captured
+        assert "api_base" not in captured
+
+    async def test_probe_uses_normalized_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake_probe(base_url, api_key, *, provider, client=None):  # noqa: ANN001
+            captured["base_url"] = base_url
+
+        monkeypatch.setattr(litellm_text, "probe_models_endpoint", fake_probe)
+        snap = ModelConfigSnapshot(
+            purpose="text",
+            provider="deepseek",
+            model="m",
+            base_url="https://api.siliconflow.cn/v1/chat/completions",
+        )
+        model = LitellmTextModel(snap, "k")
+        await model.probe()
+        # probe 拿到规整后的 base,/models 才能落在正确路径(否则误报 invalid)
+        assert captured["base_url"] == "https://api.siliconflow.cn/v1"

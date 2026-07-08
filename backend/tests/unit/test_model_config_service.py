@@ -190,6 +190,25 @@ class TestSelfTest:
         assert out.last_tested_at is not None
         assert out.status == "active"
 
+    async def test_success_resets_invalid_to_active(self, db_session: AsyncSession) -> None:
+        # M1 修复:此前自检成功不把 invalid 复位,一旦被判 invalid 便永不恢复。
+        uid = await _make_user(db_session)
+        cfg = await _make_config(db_session, uid)
+        with pytest.raises(ProviderAuthFailed):
+            await svc.test_config(
+                db_session,
+                uid,
+                cfg.id,
+                mek=_MEK,
+                model_factory=_fake_factory(ProviderAuthFailed),
+            )
+        assert (await svc.get_config(db_session, uid, cfg.id)).status == "invalid"
+        out = await svc.test_config(
+            db_session, uid, cfg.id, mek=_MEK, model_factory=_fake_factory()
+        )
+        assert out.status == "active"
+        assert (await svc.get_config(db_session, uid, cfg.id)).status == "active"
+
     async def test_auth_fail_marks_invalid_and_raises(self, db_session: AsyncSession) -> None:
         uid = await _make_user(db_session)
         cfg = await _make_config(db_session, uid)
