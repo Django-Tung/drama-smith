@@ -85,18 +85,18 @@
 
 ## 10. 剧目/剧本/角色/分析/分镜/任务 API(`api/`)
 
-- [ ] 10.1 `api/schemas.py`:扩展剧目/剧集/剧本/角色/分析/分镜/任务的请求与响应模型(Public 模型不含敏感项);`ScriptOptimize` 任务返回 `task_id` + succeeded 后的 `version_id`/diff
-- [ ] 10.2 `api/dramas.py`:`POST/GET /api/dramas`、`POST/GET /api/dramas/:dramaId/episodes`、`GET/PUT/DELETE /api/episodes/:id`(均 Bearer + 强制隔离,契约 [`architecture §3.3 ④`](../../../docs/tech-solution/architecture.md))
-- [ ] 10.3 `api/episodes.py`(剧本):`PUT /api/episodes/:id/script`(写/产版本)、`POST /api/episodes/:id/script/optimize`(异步任务,202 返回 task_id)
-- [ ] 10.4 `api/characters.py`:`GET/POST/PUT/DELETE /api/episodes/:id/characters[/:cid]`(预置角色 CRUD;`fromLibraryId` 引入本期不实现,M4)
-- [ ] 10.5 `api/analysis.py`:`POST /api/episodes/:id/analyze`(异步,202;门禁→409/422;串行→409)、`GET /api/episodes/:id/analysis`(返回 `{current_analysis, inflight_task?, stale_flag}`,D11 双语义;无合并建议)、`PATCH /api/episodes/:id/analysis/current`(切换 current_analysis_id 到指定历史 analysis,D11)
-- [ ] 10.6 `api/shots.py`:`GET /api/episodes/:id/shots`(返回 current_analysis 名下的分镜,D11)、`PATCH /api/shots/:id`、`POST /api/shots/:id/split`、`POST /api/shots/:id/merge`(作用于 current analysis 的 shots;越界标注不阻断)
-- [ ] 10.7 `api/tasks.py`:`GET /api/tasks/:id`(单任务轮询,REST 基线)+ `POST /api/tasks/:id/cancel`(协作式取消 running,已落地产物保留→canceled,D4);**`GET /api/tasks` 聚合列表、retry 本期不实现(M5)**
-- [ ] 10.8 验证:`tests/test_analysis_api.py`(HTTP 流测试置于 `tests/` 根,与 `test_models_api.py` 同范式)覆盖 dramas/episodes/script/characters/analyze/shots/tasks 正常 + 异常(409 门禁/串行、422 无剧本、跨用户 404)+ 拆解端到端(Fake LLM)轮询 pending→running→succeeded→取 analysis/shots;cancel running→canceled→同剧集可重发 analyze
+- [x] 10.1 `api/schemas.py`:扩展剧目/剧集/剧本/角色/分析/分镜/任务的请求与响应模型(Public 模型不含敏感项);`ScriptOptimize` 任务返回 `task_id` + succeeded 后的 `version_id`/diff
+- [x] 10.2 `api/dramas.py`:`POST/GET /api/dramas`、`POST/GET /api/dramas/:dramaId/episodes`、`GET/PUT/DELETE /api/episodes/:id`(均 Bearer + 强制隔离,契约 [`architecture §3.3 ④`](../../../docs/tech-solution/architecture.md))
+- [x] 10.3 `api/episodes.py`(剧本):`PUT /api/episodes/:id/script`(写/产版本)、`POST /api/episodes/:id/script/optimize`(异步任务,202 返回 task_id)
+- [x] 10.4 `api/characters.py`:`GET/POST/PUT/DELETE /api/episodes/:id/characters[/:cid]`(预置角色 CRUD;`fromLibraryId` 引入本期不实现,M4)
+- [x] 10.5 `api/analysis.py`:`POST /api/episodes/:id/analyze`(异步,202;门禁→409/422;串行→409)、`GET /api/episodes/:id/analysis`(返回 `{current_analysis, inflight_task?, stale_flag}`,D11 双语义;无合并建议)、`PATCH /api/episodes/:id/analysis/current`(切换 current_analysis_id 到指定历史 analysis,D11)
+- [x] 10.6 `api/shots.py`:`GET /api/episodes/:id/shots`(返回 current_analysis 名下的分镜,D11)、`PATCH /api/shots/:id`、`POST /api/shots/:id/split`、`POST /api/shots/:id/merge`(作用于 current analysis 的 shots;越界标注不阻断)
+- [x] 10.7 `api/tasks.py`:`GET /api/tasks/:id`(单任务轮询,REST 基线)+ `POST /api/tasks/:id/cancel`(协作式取消 running,已落地产物保留→canceled,D4);**`GET /api/tasks` 聚合列表、retry 本期不实现(M5)**
+- [x] 10.8 验证:`tests/test_analysis_api.py`(HTTP 流测试置于 `tests/` 根,与 `test_models_api.py` 同范式)覆盖 dramas/episodes/script/characters/analyze/shots/tasks 正常 + 异常(409 门禁/串行、422 无剧本、跨用户 404)+ 拆解端到端(Fake LLM)轮询 pending→running→succeeded→取 analysis/shots;cancel running→canceled→同剧集可重发 analyze
 
 ## 11. 后端测试与质量门
 
-- [ ] 11.1 集成测试:`tests/test_analysis_api.py` 全流水线(建剧→建剧集→写剧本→optimize 轮询→预置角色→analyze 轮询→取 analysis/shots→编辑分镜 拆/合/排序)+ 错误路径
+- [x] 11.1 集成测试:`tests/test_analysis_api.py` 全流水线(建剧→建剧集→写剧本→optimize 轮询→预置角色→analyze 轮询→取 analysis/shots→编辑分镜 拆/合/排序)+ 错误路径
 - [ ] 11.2 隔离测试:两用户数据,断言跨用户访问 drama/episode/script/character/shot/analysis/task 一律 404
 - [ ] 11.3 任务记录测试:并发上限排队(pending)、`interrupt_running`(模拟 running→重启→interrupted)、`input_snapshot` 含模型快照、`GET /api/tasks/:id` 跨重载可读
 - [ ] 11.4 结构化解析失败路径:Fake LLM 返回非法 JSON → 任务 failed(`analysis_parse_error`),不 500 挂起

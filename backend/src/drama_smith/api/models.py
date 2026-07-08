@@ -13,10 +13,9 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query, status
 
-from drama_smith.api.deps import get_crypto, get_current_user
+from drama_smith.api.deps import MekDep, SessionDep, UserDep
 from drama_smith.api.schemas import (
     Envelope,
     ErrorResponse,
@@ -24,8 +23,6 @@ from drama_smith.api.schemas import (
     ModelConfigPublic,
     ModelConfigUpdate,
 )
-from drama_smith.db.models import User
-from drama_smith.db.session import get_session
 from drama_smith.services import model_config_service
 
 router = APIRouter(prefix="/me/models", tags=["models"])
@@ -43,10 +40,6 @@ _PROVIDER_ERR: dict[int | str, dict[str, Any]] = {
         "description": "供应商鉴权失败(provider_auth_failed)/ 限流(rate_limited)",
     }
 }
-
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
-UserDep = Annotated[User, Depends(get_current_user)]
-MekDep = Annotated[bytes, Depends(get_crypto)]
 
 
 def _public(cfg: Any) -> ModelConfigPublic:

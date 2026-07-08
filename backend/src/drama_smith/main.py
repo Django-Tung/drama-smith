@@ -12,10 +12,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from drama_smith.api.analysis import router as analysis_router
 from drama_smith.api.auth import router as auth_router
+from drama_smith.api.characters import router as characters_router
+from drama_smith.api.dramas import router as dramas_router
+from drama_smith.api.episodes import router as episodes_router
 from drama_smith.api.health import router as health_router
 from drama_smith.api.me import router as me_router
 from drama_smith.api.models import router as models_router
+from drama_smith.api.shots import router as shots_router
+from drama_smith.api.tasks import router as tasks_router
 from drama_smith.core.config import get_settings
 from drama_smith.core.errors import register_exception_handlers
 from drama_smith.db.base import dispose_engine, get_session_factory
@@ -29,6 +35,12 @@ _OPENAPI_TAGS: list[dict[str, str]] = [
     {"name": "auth", "description": "用户注册、登录、登出与令牌刷新。"},
     {"name": "users", "description": "当前用户信息。"},
     {"name": "models", "description": "BYOK 模型配置(文本/图片/视频):CRUD、激活、零成本自检。"},
+    {"name": "dramas", "description": "剧目(CRUD)与剧集子集合。"},
+    {"name": "episodes", "description": "剧集 CRUD、剧本版本与 AI 优化(异步)。"},
+    {"name": "characters", "description": "剧集预置角色 CRUD。"},
+    {"name": "analysis", "description": "结构化拆解(异步)+ 双语义读 + 当前分析切换。"},
+    {"name": "shots", "description": "分镜列表 / 重排 / 拆 / 合 / 改(含出场角色读写)。"},
+    {"name": "tasks", "description": "任务读 + 协作式取消(异步用例轮询)。"},
 ]
 
 _APP_DESCRIPTION = (
@@ -87,6 +99,12 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api")
     app.include_router(me_router, prefix="/api")
     app.include_router(models_router, prefix="/api")
+    app.include_router(dramas_router, prefix="/api")
+    app.include_router(episodes_router, prefix="/api")
+    app.include_router(characters_router, prefix="/api")
+    app.include_router(analysis_router, prefix="/api")
+    app.include_router(shots_router, prefix="/api")
+    app.include_router(tasks_router, prefix="/api")
     return app
 
 

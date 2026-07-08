@@ -96,3 +96,12 @@ async def get_current_user(
     if user.locked_until is not None and user.locked_until > utcnow():
         raise Locked("Account is locked")
     return user
+
+
+# ---- 路由复用的依赖别名(canonical home;各路由 `from drama_smith.api.deps import ...`)----
+# `Annotated[T, Depends(...)]` 别名让端点签名简洁、一致;`ExecutorDep` 仅异步用例(analyze /
+# optimize / cancel)需要。沿用 `api/models.py` 既有范式,集中在此避免跨路由复制。
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+UserDep = Annotated[User, Depends(get_current_user)]
+MekDep = Annotated[bytes, Depends(get_crypto)]
+ExecutorDep = Annotated[TaskExecutor, Depends(get_executor)]

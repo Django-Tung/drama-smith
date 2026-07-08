@@ -20,7 +20,7 @@ from typing import Any, cast
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from drama_smith.analysis.state import AnalysisState
-from drama_smith.core.errors import InvalidState, ProviderAuthFailed, ScriptRequired
+from drama_smith.core.errors import InvalidState, NotFound, ProviderAuthFailed, ScriptRequired
 from drama_smith.db.base import get_session_factory
 from drama_smith.db.models import EpisodeCharacter, Task
 from drama_smith.db.repositories import (
@@ -36,6 +36,9 @@ from drama_smith.services import model_config_service
 from drama_smith.tasks import ProgressCallback, TaskExecutor, Work
 
 logger = logging.getLogger("drama_smith.analysis_service")
+
+# 在途态(与 analysis_repo._INFLIGHT_STATUSES 对齐):取消 / 失败兜底仅改写这些状态的 analysis。
+_INFLIGHT = ("pending", "running")
 
 # 角色名归一化(D13):trim + 去标点 + lower,缓和别名 / 拼写漂移(CJK 为 \w,保留)。
 _PUNCT = re.compile(r"[\W_]+", re.UNICODE)
@@ -76,8 +79,11 @@ async def analyze(
     """
     episode = await episode_repo.get(session, user_id, episode_id)
     config = await model_config_service.require_active_text(session, user_id)
-    script = await script_repo.get(session, user_id, episode_id)  # 无 script 容器 → NotFound
-    if script.current_version_id is None:
+    try:  # 无 script 容器(剧集存在但从未存剧本)→ ScriptRequired(422),勿泄 NotFound
+        script = await script_repo.get(session, user_id, episode_id)
+    except NotFound:
+        script = None
+    if script is None or script.current_version_id is None:
         raise ScriptRequired()
     version = await script_repo.get_version(session, user_id, script.current_version_id)
     if await analysis_repo.has_inflight(session, user_id, episode_id):
@@ -131,7 +137,8 @@ async def analyze(
         initial_state=initial_state,
         model_factory=model_factory,
     )
-    await executor.submit(task.id, user_id, work)
+    atask = await executor.submit(task.id, user_id, work)
+    _attach_terminal_fallback(atask, get_session_factory(), user_id, analysis.id)
     return task
 
 
@@ -227,13 +234,43 @@ async def _persist_analysis(
         await session.commit()
 
 
+def _attach_terminal_fallback(
+    atask: asyncio.Task[None],
+    sf: async_sessionmaker[AsyncSession],
+    user_id: int,
+    analysis_id: int,
+) -> None:
+    """任务终态兜底:取消 / 失败可能命中 work 之外的 await(执行器 `_start` / 信号量 / 模型构建),
+    work 的 except 未及触发 → 此处补标 analysis failed。
+
+    done-callback 在 asyncio 任务结束时同步触发(执行器吞 CancelledError 后任务正常结束,
+    故无法用 `task.cancelled()` 判定);无条件调 `_mark_analysis_failed`,后者幂等——
+    已 succeeded/failed 则跳过,仅 pending/running 被改写。关停期无运行 loop 时 best-effort 跳过。
+    """
+
+    def _on_done(_t: asyncio.Task[None]) -> None:
+        try:
+            asyncio.create_task(_mark_analysis_failed(sf, user_id, analysis_id))
+        except RuntimeError:  # 关停期无运行 loop:重启 recover 另兜,此处不强求
+            logger.debug("analysis=%s 终态兜底未排程(无运行 loop)", analysis_id)
+
+    atask.add_done_callback(_on_done)
+
+
 async def _mark_analysis_failed(
     sf: async_sessionmaker[AsyncSession], user_id: int, analysis_id: int
 ) -> None:
-    """失败 / 取消兜底:analysis 行标 `failed`(清 `has_inflight`,允许重发)。best-effort。"""
+    """失败 / 取消兜底:analysis 行标 `failed`(清 `has_inflight`,允许重发)。best-effort。
+
+    幂等:仅当仍处在途态(pending/running)才改写为 failed——避免覆盖已成功落库(succeeded)
+    或已被他处标终态的分析。故 work 内 `except`(取消命中图执行)与本服务的 done-callback
+    (取消命中 work 之外的 await)两路同调亦安全。
+    """
     try:
         async with sf() as session:
             analysis = await analysis_repo.get(session, user_id, analysis_id)
+            if analysis.status not in _INFLIGHT:
+                return  # 已终态,不改写
             await analysis_repo.update_result(session, analysis, status="failed")
             await session.commit()
     except Exception:  # noqa: BLE001 — 兜底不应掩盖原异常

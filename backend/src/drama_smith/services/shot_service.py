@@ -20,9 +20,10 @@ _MAX_DURATION = 15.0
 
 
 class ShotEditResult(TypedDict):
-    """patch / split / merge 的返回:操作后的镜 + 该镜的越界标注(若有)。"""
+    """patch / split / merge 的返回:操作后的镜(含出场)+ 该镜的越界标注(若有)。"""
 
     shot: Shot
+    appearing: list[dict[str, Any]]
     warnings: list[dict[str, Any]]
 
 
@@ -52,31 +53,78 @@ async def list_shots(session: AsyncSession, user_id: int, episode_id: int) -> li
     return await shot_repo.list_by_analysis(session, user_id, current.id)
 
 
+async def list_shots_with_appearing(
+    session: AsyncSession, user_id: int, episode_id: int
+) -> list[tuple[Shot, list[dict[str, Any]]]]:
+    """列 `current_analysis` 名下的分镜 + 批量回填出场角色(避免 N+1)。
+
+    供 `GET /episodes/:id/shots` 组装 `ShotPublic`(API 层据元组构造 schema)。无 current
+    analysis → 空列表。出场角色一次 `shot_repo.list_appearing` 全量取回后按 `shot_id` 分组。
+    """
+    shots = await list_shots(session, user_id, episode_id)
+    if not shots:
+        return []
+    flat = await shot_repo.list_appearing(session, [s.id for s in shots])
+    by_shot: dict[int, list[dict[str, Any]]] = {}
+    for row in flat:
+        by_shot.setdefault(row["shot_id"], []).append(row)
+    return [(s, by_shot.get(s.id, [])) for s in shots]
+
+
 async def patch_shot(
-    session: AsyncSession, user_id: int, shot_id: int, *, fields: dict[str, Any]
+    session: AsyncSession,
+    user_id: int,
+    shot_id: int,
+    *,
+    fields: dict[str, Any],
+    appearing: list[int] | None = None,
 ) -> ShotEditResult:
-    """改字段(白名单过滤);返回改后镜 + 越界标注。"""
+    """改字段(白名单过滤);`appearing` 给出则全量替换出场角色。返回改后镜 + 出场 + 越界标注。"""
     shot = await shot_repo.patch(session, user_id, shot_id, fields=fields)
+    if appearing is not None:
+        await shot_repo.replace_appearing(session, shot.id, shot.episode_id, appearing)
     await session.commit()
-    return {"shot": shot, "warnings": _duration_warnings([shot])}
+    appearing_rows = await shot_repo.list_appearing(session, [shot.id])
+    return {
+        "shot": shot,
+        "appearing": appearing_rows,
+        "warnings": _duration_warnings([shot]),
+    }
 
 
 async def split_shot(
-    session: AsyncSession, user_id: int, shot_id: int, *, fields: dict[str, Any]
+    session: AsyncSession,
+    user_id: int,
+    shot_id: int,
+    *,
+    fields: dict[str, Any],
+    appearing: list[int] | None = None,
 ) -> ShotEditResult:
-    """在某镜后插入新镜 + 全 analysis 重排;返回新镜 + 越界标注。"""
+    """在某镜后插入新镜 + 全 analysis 重排;`appearing` 给出则设新镜出场。返回新镜 + 出场 + 标注。"""
     new_shot = await shot_repo.split(session, user_id, shot_id, fields=fields)
+    if appearing is not None:
+        await shot_repo.replace_appearing(session, new_shot.id, new_shot.episode_id, appearing)
     await session.commit()
-    return {"shot": new_shot, "warnings": _duration_warnings([new_shot])}
+    appearing_rows = await shot_repo.list_appearing(session, [new_shot.id])
+    return {
+        "shot": new_shot,
+        "appearing": appearing_rows,
+        "warnings": _duration_warnings([new_shot]),
+    }
 
 
 async def merge_shots(
     session: AsyncSession, user_id: int, shot_id: int, *, into_shot_id: int
 ) -> ShotEditResult:
-    """合并相邻两镜(删其一、重排);返回合并后镜 + 越界标注。"""
+    """合并相邻两镜(删其一、重排);返回合并后镜 + 其出场 + 越界标注。"""
     merged = await shot_repo.merge(session, user_id, shot_id, into_shot_id=into_shot_id)
     await session.commit()
-    return {"shot": merged, "warnings": _duration_warnings([merged])}
+    appearing_rows = await shot_repo.list_appearing(session, [merged.id])
+    return {
+        "shot": merged,
+        "appearing": appearing_rows,
+        "warnings": _duration_warnings([merged]),
+    }
 
 
 async def reorder_shots(

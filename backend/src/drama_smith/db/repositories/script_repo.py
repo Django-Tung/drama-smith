@@ -100,6 +100,7 @@ async def upsert_input_version(
     await session.flush()
     script.current_version_id = version.id  # 逻辑指针:新版本即当前
     await session.flush()
+    await session.refresh(version)  # 回填 server_default 的 created_at(供 API 序列化)
     return version
 
 
@@ -128,6 +129,7 @@ async def add_optimize_version(
     )
     session.add(version)
     await session.flush()
+    await session.refresh(version)  # 回填 server_default 的 created_at(供 API 序列化)
     return version
 
 

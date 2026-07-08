@@ -213,3 +213,320 @@ class ModelConfigPublic(BaseModel):
     is_active: bool = Field(description="是否当前 purpose 的生效配置")
     status: str = Field(description="active / invalid(自检鉴权失败置 invalid)")
     last_tested_at: datetime | None = Field(default=None, description="最近一次零成本自检时间")
+
+
+# ---- M2 结构化分析契约(api: dramas / episodes / script / characters / analysis /
+# shots / tasks)----
+# 响应 Public 用 `from_attributes=True`(经 `model_validate(orm)` 读 ORM 行);请求体一律
+# `extra="forbid"`(未知键 422,防误传)。`Envelope[T]` 信封统一包裹;错误抛 `DomainError`
+# 子类由全局处理器映射(`{error:{code,message,details}}`),路由内不写 try/except。
+
+
+AspectRatio = Literal["16:9", "9:16", "1:1", "4:3"]
+ScriptFormat = Literal["plain", "markdown", "fountain"]
+ShotType = Literal["wide", "medium", "close", "extreme_close"]
+EpisodeStatus = Literal["draft", "analyzing", "ready", "rendering", "done"]
+
+
+class DramaPublic(BaseModel):
+    """剧目对外视图。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class EpisodePublic(BaseModel):
+    """剧集对外视图。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    drama_id: int
+    title: str
+    sort_order: int
+    aspect_ratio: str
+    style_preset: str | None
+    status: str
+    current_analysis_id: int | None = Field(description="当前生效分析指针(NULL=未拆解)")
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScriptPublic(BaseModel):
+    """剧本容器对外视图(与剧集 1:1,持当前版本指针)。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    episode_id: int
+    current_version_id: int | None = Field(description="当前生效版本指针(NULL=无剧本)")
+
+
+class ScriptVersionPublic(BaseModel):
+    """剧本版本对外视图(不可变追加;`source` ∈ input/optimize)。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    script_id: int
+    version_no: int
+    content: str
+    format: str
+    source: str
+    created_at: datetime
+
+
+class EpisodeCharacterPublic(BaseModel):
+    """剧集角色对外视图(preset / analysis 两源)。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    episode_id: int
+    name: str
+    role_type: str | None
+    persona: str | None
+    motivation: str | None
+    traits: list[str] | None
+    appearance_desc: str | None
+    source: str
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalysisPublic(BaseModel):
+    """分析产物对外视图(四维 result + 配置快照,append-only)。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    episode_id: int
+    status: str
+    result: dict[str, Any] | None
+    config_snapshot: dict[str, Any] | None
+    script_version_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskPublic(BaseModel):
+    """任务对外视图(进度 / 状态 / 错误 / 产物引用)。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    episode_id: int | None
+    type: str
+    status: str
+    progress: int
+    stage: str | None
+    trigger: str
+    input_snapshot: dict[str, Any] | None
+    output_refs: dict[str, Any] | None = Field(
+        default=None,
+        description="成功产物引用(analyze→analysis_id;optimize→version_id+diff)",
+    )
+    error: dict[str, Any] | None = Field(default=None, description="失败原因体({code,message})")
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+
+
+class AnalysisSummary(BaseModel):
+    """`GET /episodes/:id/analysis` 双语义读(D11):上次结果 + 在途任务 + 过期标记。"""
+
+    current_analysis: AnalysisPublic | None = Field(
+        default=None, description="current 指针的分析(含 result)或 None"
+    )
+    inflight_task: TaskPublic | None = Field(
+        default=None, description="该剧集在途 analyze 任务(pending/running)或 None"
+    )
+    stale_flag: bool = Field(
+        default=False, description="current 所基于版本 ≠ 当前剧本版本(提示重拆,不阻断)"
+    )
+
+
+class ShotAppearRef(BaseModel):
+    """分镜出场角色引用(角色 id + 名 + 该镜内作用)。"""
+
+    episode_character_id: int
+    name: str
+    role_in_shot: str | None = None
+
+
+class ShotPublic(BaseModel):
+    """分镜对外视图;`appearing` 由 API 层按出场关联回填(非 ORM 列)。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    analysis_id: int
+    episode_id: int
+    seq: int
+    description: str
+    shot_type: str | None
+    scene: str | None
+    plot_point: str | None
+    dialogue: str | None
+    target_duration: float | None
+    camera_move: str | None
+    related_plotline: str | None
+    related_conflict: str | None
+    appearing: list[ShotAppearRef] = Field(
+        default_factory=list, description="该镜出场角色(经 shot_characters 回填)"
+    )
+
+
+class ShotWarning(BaseModel):
+    """`target_duration` 越界标注(D5,软校验不阻断保存)。"""
+
+    shot_id: int
+    target_duration: float
+    issue: Literal["too_short", "too_long"]
+
+
+class ShotEditResult(BaseModel):
+    """patch / split / merge 结果:操作后的镜(含出场)+ 越界标注。"""
+
+    shot: ShotPublic
+    warnings: list[ShotWarning] = Field(default_factory=list)
+
+
+# ---- 请求体(均 `extra="forbid"`;未知键 422)----
+
+
+class DramaCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=128, description="剧目名")
+
+
+class DramaRename(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=128, description="新剧目名")
+
+
+class EpisodeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=128)
+    aspect_ratio: AspectRatio
+    style_preset: str | None = Field(default=None, max_length=64)
+
+
+class EpisodeUpdate(BaseModel):
+    """剧集更新(全可选);缺省字段不改、显式 null 清空 `style_preset`。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=128)
+    aspect_ratio: AspectRatio | None = None
+    style_preset: str | None = Field(default=None, max_length=64)
+    status: EpisodeStatus | None = None
+
+
+class ScriptUpsert(BaseModel):
+    """写入剧本正文(产 `source='input'` 版本并移 current 指针)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1, description="剧本正文(MEDIUMTEXT)")
+    format: ScriptFormat = Field(default="markdown")
+
+
+class CharacterCreate(BaseModel):
+    """新建预置角色(`source='preset'`)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    role_type: str | None = Field(default=None, max_length=32)
+    persona: str | None = Field(default=None, max_length=512)
+    motivation: str | None = Field(default=None, max_length=512)
+    traits: list[str] | None = None
+    appearance_desc: str | None = Field(default=None, max_length=1024)
+    sort_order: int = Field(default=0)
+
+
+class CharacterUpdate(BaseModel):
+    """更新角色(全可选;`model_fields_set` 转发,缺省不改、null 清空可空字段)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    role_type: str | None = Field(default=None, max_length=32)
+    persona: str | None = Field(default=None, max_length=512)
+    motivation: str | None = Field(default=None, max_length=512)
+    traits: list[str] | None = None
+    appearance_desc: str | None = Field(default=None, max_length=1024)
+    sort_order: int | None = None
+
+
+class AnalysisCurrentPatch(BaseModel):
+    """切换当前分析指针(D11;analysis 须属本剧集)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: int
+
+
+class ShotPatch(BaseModel):
+    """分镜字段更新(全可选);`appearing` 给出则全量替换出场角色。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: str | None = Field(default=None, max_length=1024)
+    shot_type: ShotType | None = None
+    scene: str | None = Field(default=None, max_length=128)
+    plot_point: str | None = Field(default=None, max_length=255)
+    dialogue: str | None = None
+    target_duration: float | None = Field(default=None, ge=0)
+    camera_move: str | None = Field(default=None, max_length=64)
+    related_plotline: str | None = Field(default=None, max_length=128)
+    related_conflict: str | None = Field(default=None, max_length=128)
+    appearing: list[int] | None = Field(
+        default=None, description="给出则全量替换出场角色(episode_character_id 列表)"
+    )
+
+
+class ShotSplit(BaseModel):
+    """在某镜后插入新镜;`description` 必填(分镜 NOT NULL),其余可选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = Field(min_length=1, max_length=1024)
+    shot_type: ShotType | None = None
+    scene: str | None = Field(default=None, max_length=128)
+    plot_point: str | None = Field(default=None, max_length=255)
+    dialogue: str | None = None
+    target_duration: float | None = Field(default=None, ge=0)
+    camera_move: str | None = Field(default=None, max_length=64)
+    related_plotline: str | None = Field(default=None, max_length=128)
+    related_conflict: str | None = Field(default=None, max_length=128)
+    appearing: list[int] | None = Field(
+        default=None, description="新镜出场角色(episode_character_id 列表)"
+    )
+
+
+class ShotMerge(BaseModel):
+    """合并 `shot_id` 到 `into_shot_id`(须同 analysis)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    into_shot_id: int
+
+
+class ShotsReorder(BaseModel):
+    """重排 current_analysis 名下分镜(须恰好覆盖其全部镜 id)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ordered_ids: list[int] = Field(min_length=1)

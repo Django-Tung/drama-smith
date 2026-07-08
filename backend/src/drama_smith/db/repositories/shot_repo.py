@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from drama_smith.core.errors import Conflict, NotFound
-from drama_smith.db.models import Analysis, Drama, Episode, Shot, ShotCharacter
+from drama_smith.db.models import Analysis, Drama, Episode, EpisodeCharacter, Shot, ShotCharacter
 
 # 分镜可设字段(patch / split / bulk_create 白名单过滤)。
 _SHOT_FIELDS = {
@@ -198,3 +198,77 @@ async def bulk_link_characters(
     ]
     session.add_all(objs)
     await session.flush()
+
+
+async def list_appearing(
+    session: AsyncSession, shot_ids: list[int]
+) -> list[dict[str, Any]]:
+    """批量取分镜出场角色(扁平行 `[{shot_id, episode_character_id, name, role_in_shot}]`)。
+
+    JOIN `shot_characters` × `episode_characters` 取角色名;按 `shot_id`、角色名排序。归属由
+    调用方把关(`shot_ids` 已经所有权校验路径加载,故结果天然限定在该用户的镜)。空列表 → `[]`
+    (避免 `IN ()` 在 MySQL 非法)。供 `GET /episodes/:id/shots` 与 patch/split/merge 响应回填。
+    """
+    if not shot_ids:
+        return []
+    stmt = (
+        select(
+            ShotCharacter.shot_id,
+            ShotCharacter.episode_character_id,
+            EpisodeCharacter.name,
+            ShotCharacter.role_in_shot,
+        )
+        .join(EpisodeCharacter, ShotCharacter.episode_character_id == EpisodeCharacter.id)
+        .where(ShotCharacter.shot_id.in_(shot_ids))
+        .order_by(ShotCharacter.shot_id, EpisodeCharacter.name)
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        {
+            "shot_id": row.shot_id,
+            "episode_character_id": row.episode_character_id,
+            "name": row.name,
+            "role_in_shot": row.role_in_shot,
+        }
+        for row in rows
+    ]
+
+
+async def replace_appearing(
+    session: AsyncSession,
+    shot_id: int,
+    episode_id: int,
+    character_ids: list[int],
+) -> list[int]:
+    """全量替换某镜出场角色:先删后插,仅链接**属本 `episode`** 的角色 id(防跨剧集误链)。
+
+    返回实际落库的 `character_id` 列表(去重保序;越权 / 不属本 episode 的 id 静默丢弃)。
+    `shot_id` 归属由调用方已验(patch/split 经 `shot_repo.get`);`episode_id` 用作角色归属过滤。
+    """
+    await session.execute(delete(ShotCharacter).where(ShotCharacter.shot_id == shot_id))
+    linked: list[int] = []
+    if character_ids:
+        unique: list[int] = []
+        seen: set[int] = set()
+        for cid in character_ids:
+            if cid not in seen:
+                seen.add(cid)
+                unique.append(cid)
+        valid = set(
+            (
+                await session.execute(
+                    select(EpisodeCharacter.id).where(
+                        EpisodeCharacter.episode_id == episode_id,
+                        EpisodeCharacter.id.in_(unique),
+                    )
+                )
+            ).scalars().all()
+        )
+        linked = [cid for cid in unique if cid in valid]
+        if linked:
+            await session.execute(
+                insert(ShotCharacter),
+                [{"shot_id": shot_id, "episode_character_id": cid} for cid in linked],
+            )
+    await session.flush()
+    return linked
