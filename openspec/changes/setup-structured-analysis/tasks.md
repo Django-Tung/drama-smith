@@ -43,12 +43,12 @@
 
 ## 5. 分析图节点 + 提示工程 + 结构化模型(`analysis/`)
 
-- [ ] 5.1 `analysis/state.py`:`AnalysisState(TypedDict)`(script/preset_characters/characters/plotlines/conflicts/pacing/shots/aspect_ratio/style_preset),对齐 [`backend.md §5`](../../../docs/tech-solution/backend.md);**`preset_characters` 带 `episode_character_id`、`characters`(extracted)与 `shots[*].appearing` 仅以 name 引用**(落库时解析 id,D13)
-- [ ] 5.2 `analysis/models.py`:四维 + 分镜的 pydantic 输出模型(`CharacterExtract`/`Plotline`/`Conflict`/`Pacing`/`ShotDraft` 含 3–15s `target_duration`),供 `chat()` 结构化约束(D2/D9);**亦作 `PromptStrategy.output_model`(实现注记)**
-- [ ] 5.3 `analysis/prompts.py`:**`PromptStrategy` 策略对象集合**(实现注记)——每项能力一个策略(`build_messages`/`output_model`/`response_format(provider)`/`parse`):角色抽取 / 情节线 / 冲突节奏 / 切分镜(含分镜 3–15s 时长约束、按剧情节拍切分、与预置角色融合提示)+ `optimize` 的 copy-edit 策略(明示仅润色、不重写/重排/结构调整,D12);provider 适配与退化(JSON/tool/提示词 JSON+重试)、解析失败映射 `analysis_parse_error` 均在策略层;对齐 [`analysis §5.1`](../../../docs/requirements/features/analysis.md)
-- [ ] 5.4 `analysis/nodes/`:`extract_characters`、`analyze_plot`、`analyze_conflict`、`analyze_pacing`、`split_shots`;节点仅消费注入的 `TextModel`、**编排各自 `PromptStrategy`(build_messages→chat→parse,节点不掺提示/解析细节,实现注记)**,读/写 `AnalysisState`;**`split_shots` 的 appearing 角色用 name 引用(从 preset+extracted 已知角色清单选)、不输出 db id**(D13)
+- [x] 5.1 `analysis/state.py`:`AnalysisState(TypedDict)`(script/preset_characters/characters/plotlines/conflicts/pacing/shots/aspect_ratio/style_preset),对齐 [`backend.md §5`](../../../docs/tech-solution/backend.md);**`preset_characters` 带 `episode_character_id`、`characters`(extracted)与 `shots[*].appearing` 仅以 name 引用**(落库时解析 id,D13)
+- [x] 5.2 `analysis/models.py`:四维 + 分镜的 pydantic 输出模型(`CharacterExtract`/`Plotline`/`Conflict`/`Pacing`/`ShotDraft` 含 3–15s `target_duration`),供 `chat()` 结构化约束(D2/D9);**亦作 `PromptStrategy.output_model`(实现注记)**
+- [x] 5.3 `analysis/prompts.py`:**`PromptStrategy` 策略对象集合**(实现注记)——每项能力一个策略(`build_messages`/`output_model`/`response_format(provider)`/`parse`):角色抽取 / 情节线 / 冲突节奏 / 切分镜(含分镜 3–15s 时长约束、按剧情节拍切分、与预置角色融合提示)+ `optimize` 的 copy-edit 策略(明示仅润色、不重写/重排/结构调整,D12);provider 适配与退化(JSON/tool/提示词 JSON+重试)、解析失败映射 `analysis_parse_error` 均在策略层;对齐 [`analysis §5.1`](../../../docs/requirements/features/analysis.md)
+- [x] 5.4 `analysis/nodes/`:`extract_characters`、`analyze_plot`、`analyze_conflict`、`analyze_pacing`、`split_shots`;节点仅消费注入的 `TextModel`、**编排各自 `PromptStrategy`(build_messages→chat→parse,节点不掺提示/解析细节,实现注记)**,读/写 `AnalysisState`;**`split_shots` 的 appearing 角色用 name 引用(从 preset+extracted 已知角色清单选)、不输出 db id**(D13)
 - [ ] 5.5 **结构化输出可靠性 spike**(D2 风险):在铺开五节点前,先用 `extract_characters` 单节点 + 角色抽取提示端到端打**用户真实的 active 文本模型**(如 GLM),验证 `response_format` JSON 模式可靠性;据结果定 `analysis/` 的重试/解析铠甲(可靠→轻量;不稳→解析重试 + 失败映射 `analysis_parse_error`)
-- [ ] 5.6 验证:节点单测用 `FakeTextModel`(确定性输出)覆盖各节点输入→输出、结构化解析失败 → 明确异常;prompts 不含明文 Key
+- [x] 5.6 验证:节点单测用 `FakeTextModel`(确定性输出)覆盖各节点输入→输出、结构化解析失败 → 明确异常;prompts 不含明文 Key
 
 ## 6. LangGraph 分析图编排(`graphs/analysis_graph.py`)
 

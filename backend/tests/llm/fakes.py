@@ -31,9 +31,14 @@ class FakeTextModel:
         self.chat_outcomes = chat_outcomes
         self.probed = False
         self.chat_calls = 0
+        # 记录最近一次 chat 入参,供 analysis/service 测试断言透传(response_format 等)。
+        self.last_messages: list[Mapping[str, str]] | None = None
+        self.last_params: dict[str, Any] = {}
 
     async def chat(self, messages: Sequence[Mapping[str, str]], **params: Any) -> str:
         self.chat_calls += 1
+        self.last_messages = list(messages)
+        self.last_params = dict(params)
         if self.chat_outcomes is not None:
             idx = min(self.chat_calls - 1, len(self.chat_outcomes) - 1)
             outcome = self.chat_outcomes[idx]

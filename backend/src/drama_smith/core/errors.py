@@ -112,6 +112,19 @@ class QuotaExceeded(DomainError):
     default_message = "Concurrency or quota limit reached"
 
 
+class AnalysisParseError(DomainError):
+    """结构化拆解输出解析失败(D2 风险缓解):供应商返回的 JSON 不合 schema 或不可解析。
+
+    异步任务路径(work 闭包内)由 service 捕获 → 任务 `failed`
+    (error.code=`analysis_parse_error`),不 500 挂起;同步路径兜底 422
+    (上游产出内容不合契约,可重试)。解析铠甲轻重见 `analysis/prompts.py`(5.5 spike 后定)。
+    """
+
+    code = "analysis_parse_error"
+    status_code = 422
+    default_message = "Failed to parse structured analysis output from the model"
+
+
 # HTTP 状态 → 错误码兜底映射。主要服务 FastAPI/Starlette 自身抛出的 `HTTPException`,
 # 例如 OAuth2 缺失令牌的 401、未匹配路由的 404;未列出的 5xx 归 `internal_error`。
 _STATUS_TO_CODE: dict[int, str] = {
@@ -200,6 +213,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 
 __all__ = [
+    "AnalysisParseError",
     "Conflict",
     "DomainError",
     "Locked",
