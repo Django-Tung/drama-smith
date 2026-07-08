@@ -59,12 +59,12 @@
 
 ## 7. 进程内任务执行器(`tasks/`)
 
-- [ ] 7.1 `tasks/states.py`:状态机枚举 + 合法流转表(`pending→running→{succeeded|failed|canceled|interrupted}`),承接 [`backend.md §7.2`](../../../docs/tech-solution/backend.md)
-- [ ] 7.2 `tasks/executor.py`:`TaskExecutor`(不接 `FileStore`,D4);`submit(task, work)` 落 `pending`→`create_task(_run)`;`_run` 内每用户 `Semaphore(max_tasks_per_user)` + 全局 `Semaphore(max_global_workers)` acquire(超限自然排队 `pending`)→置 `running`→执行 `work(progress_cb)`→`finish`(succeeded/failed/canceled)
-- [ ] 7.3 `tasks/progress.py`:`progress_cb(task_id)` → `task_repo.update_progress(progress, stage)`(写记录,REST 可读)
-- [ ] 7.4 `tasks/recover.py`:`interrupt_running()` —— `UPDATE tasks SET status='interrupted', error={code:'restart_interrupted'} WHERE status='running'`(D4,对齐 [`architecture §4.4`](../../../docs/tech-solution/architecture.md))
-- [ ] 7.5 `TaskExecutor.shutdown()`:取消在跑协程、落 `interrupted`(优雅停止)
-- [ ] 7.6 验证:`tests/unit/test_executor.py`(假 work + 假 LLM)覆盖状态机、排队、并发上限、cancel→canceled、`interrupt_running`;executor 不耦合业务(只调度)
+- [x] 7.1 `tasks/states.py`:状态机枚举 + 合法流转表(`pending→running→{succeeded|failed|canceled|interrupted}`),承接 [`backend.md §7.2`](../../../docs/tech-solution/backend.md)
+- [x] 7.2 `tasks/executor.py`:`TaskExecutor`(不接 `FileStore`,D4);`submit(task, work)` 落 `pending`→`create_task(_run)`;`_run` 内每用户 `Semaphore(max_tasks_per_user)` + 全局 `Semaphore(max_global_workers)` acquire(超限自然排队 `pending`)→置 `running`→执行 `work(progress_cb)`→`finish`(succeeded/failed/canceled)
+- [x] 7.3 `tasks/progress.py`:`progress_cb(task_id)` → `task_repo.update_progress(progress, stage)`(写记录,REST 可读)
+- [x] 7.4 `tasks/recover.py`:`interrupt_running()` —— `UPDATE tasks SET status='interrupted', error={code:'restart_interrupted'} WHERE status='running'`(D4,对齐 [`architecture §4.4`](../../../docs/tech-solution/architecture.md))
+- [x] 7.5 `TaskExecutor.shutdown()`:取消在跑协程、落 `interrupted`(优雅停止)
+- [x] 7.6 验证:`tests/unit/test_executor.py`(假 work + 假 LLM)覆盖状态机、排队、并发上限、cancel→canceled、`interrupt_running`;executor 不耦合业务(只调度)
 
 ## 8. service 层(用例编排 + 门禁 + 事务边界)
 

@@ -125,6 +125,17 @@ class AnalysisParseError(DomainError):
     default_message = "Failed to parse structured analysis output from the model"
 
 
+class InvalidState(DomainError):
+    """任务 / 资源状态不允许该操作(409)。
+
+    用于:同一 episode 已有 inflight analyze(D3 串行)、任务非法状态流转、剧本已采纳等。
+    """
+
+    code = "invalid_state"
+    status_code = 409
+    default_message = "Operation not allowed in the current state"
+
+
 # HTTP 状态 → 错误码兜底映射。主要服务 FastAPI/Starlette 自身抛出的 `HTTPException`,
 # 例如 OAuth2 缺失令牌的 401、未匹配路由的 404;未列出的 5xx 归 `internal_error`。
 _STATUS_TO_CODE: dict[int, str] = {
@@ -216,6 +227,7 @@ __all__ = [
     "AnalysisParseError",
     "Conflict",
     "DomainError",
+    "InvalidState",
     "Locked",
     "ModelNotConfigured",
     "NotFound",
