@@ -52,10 +52,10 @@
 
 ## 6. LangGraph 分析图编排(`graphs/analysis_graph.py`)
 
-- [ ] 6.1 `graphs/analysis_graph.py`:建图 `START → extract_characters → fan-out(analyze_plot | analyze_conflict | analyze_pacing) → split_shots → END`(D2);节点经 LangGraph 并行 fan-out
-- [ ] 6.2 构造入口:`build_analysis_graph(text_model) -> CompiledGraph`;状态流转与节点接线
-- [ ] 6.3 流式进度归一:节点事件 → `(progress, stage)` 回调(D2,供执行器 progress 写记录);本期可用 `astream_events` 或节点进入/退出钩子
-- [ ] 6.4 验证:用 `FakeTextModel` 端到端跑通图(输入剧本 → 产出四维 + 分镜);`graphs/` 不 import litellm(分层自检 grep)
+- [x] 6.1 `graphs/analysis_graph.py`:建图 `START → extract_characters → fan-out(analyze_plot | analyze_conflict | analyze_pacing) → split_shots → END`(D2);节点经 LangGraph 并行 fan-out
+- [x] 6.2 构造入口:`build_analysis_graph(text_model) -> CompiledGraph`;状态流转与节点接线
+- [x] 6.3 流式进度归一:节点事件 → `(progress, stage)` 回调(D2,供执行器 progress 写记录);本期可用 `astream_events` 或节点进入/退出钩子
+- [x] 6.4 验证:用 `FakeTextModel` 端到端跑通图(输入剧本 → 产出四维 + 分镜);`graphs/` 不 import litellm(分层自检 grep)
 
 ## 7. 进程内任务执行器(`tasks/`)
 
