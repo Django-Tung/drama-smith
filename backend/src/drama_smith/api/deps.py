@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 
 import jwt
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from drama_smith.db.base import utcnow
 from drama_smith.db.models import User
 from drama_smith.db.repositories import user_repo
 from drama_smith.db.session import get_session
+from drama_smith.tasks import TaskExecutor
 
 # `tokenUrl` 仅用于 OpenAPI / Swagger「Authorize」表单展示;实际登录端点接收 JSON。
 oauth_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -62,6 +63,19 @@ def get_crypto() -> bytes:
     service 层据此解密/封存 API Key;支持测试期 `override_settings`。明文 MEK 不入 OpenAPI / 日志。
     """
     return get_mek()
+
+
+def get_executor(request: Request) -> TaskExecutor:
+    """FastAPI 依赖:从 `app.state.executor` 取进程内执行器(`main.lifespan` 构造注入)。
+
+    analyze/optimize 等异步用例经此把 work 闭包提交执行器;`app.state.executor` 由 lifespan
+    在启动期构造、`recover_running()` 恢复残留 running、关闭期 `shutdown()` 收口。测试触发
+    lifespan(`async with lifespan(app)` 或 `with TestClient(app)`)即注入;未注入则 fail-fast。
+    """
+    executor: TaskExecutor | None = getattr(request.app.state, "executor", None)
+    if executor is None:
+        raise RuntimeError("TaskExecutor 未注入 app.state(检查 lifespan 是否已启动)")
+    return executor
 
 
 async def get_current_user(

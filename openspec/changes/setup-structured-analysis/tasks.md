@@ -78,10 +78,10 @@
 
 ## 9. 错误码、依赖接线与路由挂载
 
-- [ ] 9.1 `core/errors.py`:确认 `ModelNotConfigured`/`ProviderAuthFailed`/`RateLimited`/`InvalidState`(M1 已登记 `invalid_state`/`model_not_configured` 等);新增 `analysis_parse_error`(结构化解析失败,500 或 422 映射,对齐 D2 风险缓解)经 `_domain_error_handler` 登记
-- [ ] 9.2 `api/deps.py`:增 `get_executor()` 依赖(读 `app.state.executor`);复用 `get_crypto`/`get_current_user`
-- [ ] 9.3 `main.py`:lifespan 内构造 `TaskExecutor(engine, max_per_user, max_global_workers)` + `await executor.recover_running()`;`app.state.executor` 注入;yield 后 `await executor.shutdown()`;挂载新路由(`/api/dramas`…、`/api/tasks`)与 Swagger tag;CORS 不变
-- [ ] 9.4 验证:`create_app()` 起 app;lifespan 启动期 `recover_running()` 空跑无副作用;`/openapi.json` 含新端点与新错误码
+- [x] 9.1 `core/errors.py`:确认 `ModelNotConfigured`/`ProviderAuthFailed`/`RateLimited`/`InvalidState`(M1 已登记 `invalid_state`/`model_not_configured` 等);新增 `analysis_parse_error`(结构化解析失败,500 或 422 映射,对齐 D2 风险缓解)经 `_domain_error_handler` 登记
+- [x] 9.2 `api/deps.py`:增 `get_executor()` 依赖(读 `app.state.executor`);复用 `get_crypto`/`get_current_user`
+- [x] 9.3 `main.py`:lifespan 内构造 `TaskExecutor(engine, max_per_user, max_global_workers)` + `await executor.recover_running()`;`app.state.executor` 注入;yield 后 `await executor.shutdown()`;挂载新路由(`/api/dramas`…、`/api/tasks`)与 Swagger tag;CORS 不变
+- [x] 9.4 验证:`create_app()` 起 app;lifespan 启动期 `recover_running()` 空跑无副作用;`/openapi.json` 含新端点与新错误码
 
 ## 10. 剧目/剧本/角色/分析/分镜/任务 API(`api/`)
 
