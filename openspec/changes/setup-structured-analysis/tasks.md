@@ -68,13 +68,13 @@
 
 ## 8. service 层(用例编排 + 门禁 + 事务边界)
 
-- [ ] 8.1 `services/drama_service.py`、`episode_service.py`:CRUD 用例,事务边界在 service(承接 M0 D14);归属校验经对应 repo
-- [ ] 8.2 `services/script_service.py`:`upsert_script`(产 `source='input'` 版本,D6)、`optimize_script`(发起异步任务)、`accept_version`/`reject`(移/不移 `current_version_id`)、`list_versions`/`revert`
-- [ ] 8.3 `services/shot_service.py`:`patch`/`split`/`merge`/`reorder`(事务内 dense-rank 重排,D5);`target_duration` 越界标注(不阻断)
-- [ ] 8.4 `services/analysis_service.py`:`analyze(user_id, episode_id)`——`require_active_text`(M1 预留)取配置→`crypto.decrypt`→`factory.build`→构造图→`executor.submit(type='analyze', work=run_graph)`;`has_inflight` 串行约束(D3/D8);succeeded 时**新建 analysis(记 `script_version_id`=当时 current 版本,D11)** + 写 `result` + 批量插 `shots`/`shot_characters` + 移 `episodes.current_analysis_id`(旧 analysis 保留可切回)+ 拆解产角色落 `episode_characters`(source='analysis',D7,**不做自动合并**);**落库事务:先 bulk_create extracted 拿 id → 建 name→id 映射(preset 优先)→ 解析 shots.appearing 写 shot_characters,name 归一化失败则跳过 + warning(D13)**;`get_analysis` 返回 `{current_analysis, inflight_task?, stale_flag}`(双语义,D11);`select_current_analysis`(切换 current 指针)
-- [ ] 8.5 `analyze` 的 `work` 闭包:拉起图、节点调 `TextModel.chat`、进度回调、异常映射(401/403→`set_status(invalid)`+`ProviderAuthFailed`→任务 failed,D8);`input_snapshot` 含剧本版本 + 模型配置快照(D9)
-- [ ] 8.6 `optimize` 的 `work` 闭包:取当前剧本→`TextModel.chat`(**copy-edit 提示**:格式/错别字/标点/对白润色,**明示不做重写/重排/结构调整**,D12)→产 `source='optimize'` 新版本 + **后端 `difflib` 段落级 diff**(`[{seg,before,after,change_type}]`,段落切分 plain 按空行/markdown 按段落·标题/fountain 按场景头,`script_service` 小函数、不引 fountain parser;经 `output_refs` 返回、**不落库**)→任务 succeeded 返回新版本 id + diff;**采纳整版**(accept/reject,D12,前端只读 view)
-- [ ] 8.7 验证:service 单测(Fake LLM 替身)覆盖 analyze/optimize 正常 + 门禁(`ModelNotConfigured`)+ 串行约束(`invalid_state`)+ 鉴权失败置 invalid + 越界标注;事务边界正确(repo 只 flush,service commit)
+- [x] 8.1 `services/drama_service.py`、`episode_service.py`:CRUD 用例,事务边界在 service(承接 M0 D14);归属校验经对应 repo
+- [x] 8.2 `services/script_service.py`:`upsert_script`(产 `source='input'` 版本,D6)、`optimize_script`(发起异步任务)、`accept_version`/`reject`(移/不移 `current_version_id`)、`list_versions`/`revert`
+- [x] 8.3 `services/shot_service.py`:`patch`/`split`/`merge`/`reorder`(事务内 dense-rank 重排,D5);`target_duration` 越界标注(不阻断)
+- [x] 8.4 `services/analysis_service.py`:`analyze(user_id, episode_id)`——`require_active_text`(M1 预留)取配置→`crypto.decrypt`→`factory.build`→构造图→`executor.submit(type='analyze', work=run_graph)`;`has_inflight` 串行约束(D3/D8);succeeded 时**新建 analysis(记 `script_version_id`=当时 current 版本,D11)** + 写 `result` + 批量插 `shots`/`shot_characters` + 移 `episodes.current_analysis_id`(旧 analysis 保留可切回)+ 拆解产角色落 `episode_characters`(source='analysis',D7,**不做自动合并**);**落库事务:先 bulk_create extracted 拿 id → 建 name→id 映射(preset 优先)→ 解析 shots.appearing 写 shot_characters,name 归一化失败则跳过 + warning(D13)**;`get_analysis` 返回 `{current_analysis, inflight_task?, stale_flag}`(双语义,D11);`select_current_analysis`(切换 current 指针)
+- [x] 8.5 `analyze` 的 `work` 闭包:拉起图、节点调 `TextModel.chat`、进度回调、异常映射(401/403→`set_status(invalid)`+`ProviderAuthFailed`→任务 failed,D8);`input_snapshot` 含剧本版本 + 模型配置快照(D9)
+- [x] 8.6 `optimize` 的 `work` 闭包:取当前剧本→`TextModel.chat`(**copy-edit 提示**:格式/错别字/标点/对白润色,**明示不做重写/重排/结构调整**,D12)→产 `source='optimize'` 新版本 + **后端 `difflib` 段落级 diff**(`[{seg,before,after,change_type}]`,段落切分 plain 按空行/markdown 按段落·标题/fountain 按场景头,`script_service` 小函数、不引 fountain parser;经 `output_refs` 返回、**不落库**)→任务 succeeded 返回新版本 id + diff;**采纳整版**(accept/reject,D12,前端只读 view)
+- [x] 8.7 验证:service 单测(Fake LLM 替身)覆盖 analyze/optimize 正常 + 门禁(`ModelNotConfigured`)+ 串行约束(`invalid_state`)+ 鉴权失败置 invalid + 越界标注;事务边界正确(repo 只 flush,service commit)
 
 ## 9. 错误码、依赖接线与路由挂载
 

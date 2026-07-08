@@ -132,3 +132,25 @@ async def interrupt_running(session: AsyncSession) -> int:
         )
     )
     return int(result.rowcount or 0)
+
+
+async def find_inflight_by_episode(
+    session: AsyncSession, user_id: int, episode_id: int, *, type: str
+) -> Task | None:
+    """该剧集最近一个在途(`pending`/`running`)任务(按 `type` 过滤);无则 None。
+
+    供 `GET /api/episodes/:id/analysis` 的 `inflight_task?`(D11 双语义:既要表达上次结果、
+    又要表达正在跑)。归属经 `user_id`;按 `created_at` 倒序取最新一个。
+    """
+    stmt = (
+        select(Task)
+        .where(
+            Task.user_id == user_id,
+            Task.episode_id == episode_id,
+            Task.type == type,
+            Task.status.in_(("pending", "running")),
+        )
+        .order_by(Task.created_at.desc(), Task.id.desc())
+        .limit(1)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()

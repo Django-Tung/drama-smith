@@ -38,6 +38,8 @@ ProgressCallback = Callable[[int, str], None]
 
 def build_analysis_graph(text_model: TextModel) -> Any:
     """构造编译后的分析图;`text_model` 经 partial 贯穿所有节点(D8 单模型贯穿整图)。"""
+    # JetBrains 不认 TypedDict 满足 langgraph StateLike 协议(mypy 严格模式通过,IDE-only false positive)。
+    # noinspection PyTypeChecker
     graph = StateGraph(AnalysisState)
     graph.add_node("extract_characters", partial(nodes.extract_characters, text_model=text_model))
     graph.add_node("analyze_plot", partial(nodes.analyze_plot, text_model=text_model))

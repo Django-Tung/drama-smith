@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from drama_smith.core.errors import Conflict, NotFound
-from drama_smith.db.models import Analysis, Drama, Episode, Shot
+from drama_smith.db.models import Analysis, Drama, Episode, Shot, ShotCharacter
 
 # 分镜可设字段(patch / split / bulk_create 白名单过滤)。
 _SHOT_FIELDS = {
@@ -176,4 +176,25 @@ async def reorder(
         raise Conflict("ordered_ids must cover exactly the analysis shots")
     for seq, sid in enumerate(ordered_ids, start=1):
         by_id[sid].seq = seq
+    await session.flush()
+
+
+async def bulk_link_characters(
+    session: AsyncSession,
+    links: list[tuple[int, list[int]]],
+) -> None:
+    """批量写 `shot_characters`(分镜 → 出场角色);`links` = [(shot_id, [char_id, ...]), ...]。
+
+    拆解落库(D13 persist)用:shots 已 `bulk_create` 拿到 id 后,经 name→id 映射解析 appearing,
+    再由此方法把关联落库。归属由调用方把关(service 已验 current analysis 归属);`role_in_shot`
+    本期不填(随分镜对白演进)。空 `links` 直接返回(无出场角色的镜不产生关联行)。
+    """
+    if not links:
+        return
+    objs = [
+        ShotCharacter(shot_id=shot_id, episode_character_id=cid)
+        for shot_id, char_ids in links
+        for cid in char_ids
+    ]
+    session.add_all(objs)
     await session.flush()

@@ -154,6 +154,24 @@ async def has_active_text(session: AsyncSession, user_id: int) -> bool:
     return bool((await session.execute(stmt)).scalar())
 
 
+async def get_active_text_config(
+    session: AsyncSession, user_id: int
+) -> ModelConfig | None:
+    """取该用户当前 active 且 `status='active'` 的文本配置;无则 None(M2 分析门禁用)。
+
+    比 `has_active_text` 多一道 `status='active'` 过滤:被自检判 `invalid` 的配置不可用于
+    分析(`design.md` D8 门禁)。每用途至多一条 active(UNIVE `active_key` 兜底),故
+    `scalar_one_or_none` 安全。
+    """
+    stmt = select(ModelConfig).where(
+        ModelConfig.user_id == user_id,
+        ModelConfig.purpose == "text",
+        ModelConfig.is_active.is_(True),
+        ModelConfig.status == "active",
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 async def activate(session: AsyncSession, user_id: int, config_id: int) -> ModelConfig:
     """单事务内:先把同 `(user_id, purpose)` 的其它 active 置 0,再置目标为 1(design D3)。
 

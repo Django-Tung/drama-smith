@@ -11,14 +11,15 @@
 - `activate_config`:单事务翻转(D3)。
 - `test_config`:解密 Key → `factory.build` → `probe()` → 回写 `last_tested_at`;
   鉴权失败置 `invalid` + 抛 `ProviderAuthFailed`(D7),限流/超时抛 `RateLimited`(D6)。
-- `require_active_text`:M2 分析门禁预留,本期不被调用。
+- `require_active_text`:M2 分析门禁 —— 取 active 且 `status='active'` 的文本配置,无则
+  `ModelNotConfigured`;返回配置行(供 `build_text_model_from_config` 解密构造 TextModel)。
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from drama_smith.core import crypto
 from drama_smith.core.errors import (
@@ -258,10 +259,48 @@ async def _probe_with_retry(model: TextModel | ImageModel) -> None:
             # 瞬态限流:立即重试一次
 
 
-async def require_active_text(session: AsyncSession, user_id: int) -> None:
-    """M2 分析门禁预留:无 active 文本配置 → `ModelNotConfigured`。本期不被调用(D11)。"""
-    if not await model_config_repo.has_active_text(session, user_id):
+async def require_active_text(session: AsyncSession, user_id: int) -> ModelConfig:
+    """M2 分析门禁:取 active 且 `status='active'` 的文本配置;无 → `ModelNotConfigured`。
+
+    返回配置行(供 `build_active_text_model` 解密 Key 构造 TextModel)。比仅判存在多验
+    `status`:被自检判 `invalid` 的配置不可用于分析(D8)。
+    """
+    config = await model_config_repo.get_active_text_config(session, user_id)
+    if config is None:
         raise ModelNotConfigured()
+    return config
+
+
+def build_text_model_from_config(
+    config: ModelConfig,
+    mek: bytes,
+    *,
+    model_factory: ModelBuilder | None = None,
+) -> TextModel:
+    """从**已加载**的配置行构造 `TextModel`(同步、不再查 DB;供 work 闭包用**冻结的**配置,D9)。
+
+    明文 Key 仅驻返回 adapter 的内存(D8);`model_factory` 供测试注入替身(镜像 `test_config`)。
+    发起拆解 / 优化时 service 经 `require_active_text` 取 config 行、work 闭包捕获之 —— 运行期
+    用户改 active 配置不影响在途任务(config 已冻结,见 D9)。
+    """
+    plaintext_key = crypto.decrypt(_envelope(config), mek)
+    model = (model_factory or llm_factory.build)(_snapshot(config), plaintext_key)
+    if not isinstance(model, TextModel):
+        # 不可达:`require_active_text` 取的是 purpose='text' 行,factory 据此产 TextModel。
+        raise ModelNotConfigured(details={"reason": "active_config_not_text"})
+    return model
+
+
+async def mark_config_invalid(
+    session_factory: async_sessionmaker[AsyncSession], user_id: int, config_id: int
+) -> None:
+    """后台路径(work 闭包)用:开自己的 session 把配置置 `invalid` + commit(D8 鉴权失败)。
+
+    work 在请求 session 之外跑,需自建 session 落 status;与 `test_config` 的请求内路径互补。
+    """
+    async with session_factory() as session:
+        await model_config_repo.set_status(session, user_id, config_id, "invalid")
+        await session.commit()
 
 
 async def has_text_configured(session: AsyncSession, user_id: int) -> bool:

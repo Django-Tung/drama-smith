@@ -136,6 +136,18 @@ class InvalidState(DomainError):
     default_message = "Operation not allowed in the current state"
 
 
+class ScriptRequired(DomainError):
+    """剧集尚无剧本,无法拆解(422)。
+
+    `analyze` 前置:剧本未输入则无可拆解的文本;与「门禁/串行」的 409 区分,单独走 422
+    (上游可引导用户先输入剧本)。对齐 `tasks.md` §10.8。
+    """
+
+    code = "script_required"
+    status_code = 422
+    default_message = "Episode has no script yet; please input one before analyzing"
+
+
 # HTTP 状态 → 错误码兜底映射。主要服务 FastAPI/Starlette 自身抛出的 `HTTPException`,
 # 例如 OAuth2 缺失令牌的 401、未匹配路由的 404;未列出的 5xx 归 `internal_error`。
 _STATUS_TO_CODE: dict[int, str] = {
@@ -234,6 +246,7 @@ __all__ = [
     "ProviderAuthFailed",
     "QuotaExceeded",
     "RateLimited",
+    "ScriptRequired",
     "Unauthenticated",
     "register_exception_handlers",
 ]
