@@ -18,6 +18,7 @@ import type {
   ModelPurpose,
   RefreshRequest,
   RegisterRequest,
+  Script,
   ScriptUpsert,
   ScriptVersion,
   Shot,
@@ -188,6 +189,11 @@ export const episodesApi = {
   /** 写入剧本正文:产 source='input' 新版本并移 current 指针,返回该版本。 */
   upsertScript(episodeId: number, body: ScriptUpsert): Promise<ScriptVersion> {
     return request<ScriptVersion>(`/api/episodes/${episodeId}/script`, { method: 'PUT', body })
+  },
+
+  /** 取剧本容器(含 current_version_id);无容器 → 404(前端视为「无剧本」)。 */
+  getScript(episodeId: number): Promise<Script> {
+    return request<Script>(`/api/episodes/${episodeId}/script`)
   },
 
   /** 列剧本全部版本(新 → 旧)。 */

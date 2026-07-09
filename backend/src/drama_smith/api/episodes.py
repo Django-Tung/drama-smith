@@ -17,6 +17,7 @@ from drama_smith.api.schemas import (
     EpisodePublic,
     EpisodeUpdate,
     ErrorResponse,
+    ScriptPublic,
     ScriptUpsert,
     ScriptVersionPublic,
     TaskPublic,
@@ -82,6 +83,18 @@ async def update_episode(
 )
 async def delete_episode(episode_id: int, user: UserDep, session: SessionDep) -> None:
     await episode_service.delete_episode(session, user.id, episode_id)
+
+
+@router.get(
+    "/{episode_id}/script",
+    summary="获取剧本容器",
+    description="剧本容器(含 `current_version_id`);供前端标记当前版本。无容器 → 404。",
+    response_model=Envelope[ScriptPublic],
+    responses={**_NOT_FOUND},
+)
+async def get_script(episode_id: int, user: UserDep, session: SessionDep) -> Envelope[ScriptPublic]:
+    script = await script_service.get_script(session, user.id, episode_id)
+    return Envelope(data=ScriptPublic.model_validate(script))
 
 
 @router.put(
