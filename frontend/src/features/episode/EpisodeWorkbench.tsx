@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner'
 import type { AnalysisSummary, Episode } from '@/types'
 import { CastTab } from './CastTab'
 import { ScriptTab } from './ScriptTab'
+import { ShotsEditor } from '@/features/shots/ShotsEditor'
 
 type Tab = 'script' | 'cast' | 'shots'
 
@@ -168,7 +169,10 @@ export function EpisodeWorkbench({ episodeId }: { episodeId: number }) {
             />
           ) : null}
           {tab === 'shots' ? (
-            <p className="text-sm text-muted-foreground">分镜编辑(后续批次接入)。</p>
+            <ShotsEditor
+              episodeId={episodeId}
+              currentAnalysisId={summary?.current_analysis?.id ?? null}
+            />
           ) : null}
         </>
       )}
