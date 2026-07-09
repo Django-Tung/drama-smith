@@ -4,6 +4,7 @@ import { AppShell } from '@/components/AppShell'
 import { RequireAuth } from '@/components/RequireAuth'
 import { RequireSetup } from '@/components/RequireSetup'
 import { DramasPage } from '@/routes/DramasPage'
+import { EpisodePage } from '@/routes/EpisodePage'
 import { LibraryPage } from '@/routes/LibraryPage'
 import { LoginPage } from '@/routes/LoginPage'
 import { RegisterPage } from '@/routes/RegisterPage'
@@ -44,6 +45,7 @@ export function App() {
         >
           <Route index element={<Navigate to="/dramas" replace />} />
           <Route path="dramas" element={<DramasPage />} />
+          <Route path="episodes/:episodeId" element={<EpisodePage />} />
           <Route path="library" element={<LibraryPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="settings" element={<SettingsPage />} />

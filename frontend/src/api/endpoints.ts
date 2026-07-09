@@ -276,6 +276,11 @@ export const analysisApi = {
     return request<AnalysisSummary>(`/api/episodes/${episodeId}/analysis`)
   },
 
+  /** 列全部分析(新→旧;D11「切回历史分镜」picker 用)。 */
+  listHistory(episodeId: number): Promise<Analysis[]> {
+    return request<Analysis[]>(`/api/episodes/${episodeId}/analyses`)
+  },
+
   /** 切换 current_analysis_id 到指定历史 analysis(D11;须属本剧集)。 */
   selectCurrent(episodeId: number, body: AnalysisCurrentPatch): Promise<Analysis> {
     return request<Analysis>(`/api/episodes/${episodeId}/analysis/current`, {
