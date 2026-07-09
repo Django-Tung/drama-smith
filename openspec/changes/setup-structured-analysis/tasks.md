@@ -109,12 +109,12 @@
 
 ## 13. 前端剧库 + 剧集工作台 + 分镜编辑台
 
-- [ ] 13.1 `routes/DramasPage.tsx`(实现版替换占位):剧列表 → 进剧看剧集列表;新建剧/剧集(建剧集时设画幅/风格);剧/剧集重命名/删除(软删);Zustand store + 手动 `request`(D10,不引 TanStack Query)
-- [ ] 13.2 剧集工作台(`features/episode/`):剧本输入(粘贴,format 选择)+ 版本切换/回退;可选「AI 优化」发起 → 轮询 `GET /api/tasks/:id`(指数退避 2–5s,D10)→ 比对预览(**只读 diff view**,后端已算段落 diff、前端不计算)→ 整版接受/拒绝(无段落级部分采纳,D12);角色预置 CRUD;「发起拆解」按钮(文本未配→禁用并引导设置)
-- [ ] 13.3 拆解轮询 + 结果:发起后轮询任务进度(stage/progress);succeeded 后拉 `GET /analysis`(`{current_analysis, inflight_task?, stale_flag}`,D11)+ `GET /shots`;`stale_flag` 为真时标「⚠️ 基于旧版剧本,建议重新拆解」(不阻断)+ 提供「切回历史分镜」入口(调 `PATCH /analysis/current`);角色按 `source`(preset/analysis)分组展示、手动 CRUD 去重(D7,无自动合并 UI);任务卡住可点「取消」(调 `POST /api/tasks/:id/cancel`)后重发
-- [ ] 13.4 分镜编辑台(`features/shots/`):分镜清单(按 seq)、逐镜编辑(描述/景别/时长/出场角色/对白)、拆/合/排序;`target_duration` 越界高亮提示(不阻断,D5)
-- [ ] 13.5 `LibraryPage`/`TasksPage` 维持占位(M4/M5);路由与 AppShell 导航更新
-- [ ] 13.6 验证:`tsc` + `eslint` + `vite build` 全绿;端到端人工跑通(登录→建剧/剧集→写剧本→optimize→预置角色→analyze 轮询→取结果→编辑分镜)待用户在后端在跑时验收
+- [x] 13.1 `routes/DramasPage.tsx`(实现版替换占位):剧列表 → 进剧看剧集列表;新建剧/剧集(建剧集时设画幅/风格);剧/剧集重命名/删除(软删);Zustand store + 手动 `request`(D10,不引 TanStack Query)
+- [x] 13.2 剧集工作台(`features/episode/`):剧本输入(粘贴,format 选择)+ 版本切换/回退;可选「AI 优化」发起 → 轮询 `GET /api/tasks/:id`(指数退避 2–5s,D10)→ 比对预览(**只读 diff view**,后端已算段落 diff、前端不计算)→ 整版接受/拒绝(无段落级部分采纳,D12);角色预置 CRUD;「发起拆解」按钮(文本未配→禁用并引导设置)
+- [x] 13.3 拆解轮询 + 结果:发起后轮询任务进度(stage/progress);succeeded 后拉 `GET /analysis`(`{current_analysis, inflight_task?, stale_flag}`,D11)+ `GET /shots`;`stale_flag` 为真时标「⚠️ 基于旧版剧本,建议重新拆解」(不阻断)+ 提供「切回历史分镜」入口(调 `PATCH /analysis/current`);角色按 `source`(preset/analysis)分组展示、手动 CRUD 去重(D7,无自动合并 UI);任务卡住可点「取消」(调 `POST /api/tasks/:id/cancel`)后重发
+- [x] 13.4 分镜编辑台(`features/shots/`):分镜清单(按 seq)、逐镜编辑(描述/景别/时长/出场角色/对白)、拆/合/排序;`target_duration` 越界高亮提示(不阻断,D5)
+- [x] 13.5 `LibraryPage`/`TasksPage` 维持占位(M4/M5);路由与 AppShell 导航更新
+- [x] 13.6 验证:`tsc` + `eslint` + `vite build` 全绿;端到端人工跑通(登录→建剧/剧集→写剧本→optimize→预置角色→analyze 轮询→取结果→编辑分镜)待用户在后端在跑时验收
 
 ## 14. 联调与收尾
 
