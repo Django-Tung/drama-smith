@@ -391,6 +391,41 @@ class TestAnalyzePipeline:
         assert rerun["status"] == "succeeded"
 
 
+class TestAnalysisHistory:
+    async def test_history_new_to_old_and_cross_user_404(
+        self,
+        client: AsyncClient,
+        register_user: RegisterUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(llm_factory, "build", lambda snap, key: _RoutingTextModel())
+        t = await _register(client, register_user)
+        await _create_text_config(client, t)
+        _, ep = await _seed_episode(client, t)
+
+        # 首次拆解 → 历史仅 1 条
+        first = await _run_analyze(client, t, ep)
+        assert first["status"] == "succeeded"
+        hist = (await client.get(f"/api/episodes/{ep}/analyses", headers=_auth(t))).json()["data"]
+        assert len(hist) == 1
+        assert hist[0]["status"] == "succeeded"
+        first_id = hist[0]["id"]
+
+        # 重拆 → 历史 2 条,新→旧序;旧 analysis 保留可切回(D11)
+        second = await _run_analyze(client, t, ep)
+        assert second["status"] == "succeeded"
+        hist = (await client.get(f"/api/episodes/{ep}/analyses", headers=_auth(t))).json()["data"]
+        assert len(hist) == 2
+        assert hist[0]["id"] == second["output_refs"]["analysis_id"]
+        assert hist[1]["id"] == first_id  # 旧的排第二,append-only 保留
+
+        # 跨用户:他人看不到此剧集的分析历史(404,不泄露存在)
+        t2 = await _register(client, register_user)
+        assert (
+            await client.get(f"/api/episodes/{ep}/analyses", headers=_auth(t2))
+        ).status_code == 404
+
+
 class TestOptimizePipeline:
     async def test_optimize_produces_version_without_moving_pointer(
         self,

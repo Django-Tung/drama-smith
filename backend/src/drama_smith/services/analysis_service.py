@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from drama_smith.analysis.state import AnalysisState
 from drama_smith.core.errors import InvalidState, NotFound, ProviderAuthFailed, ScriptRequired
 from drama_smith.db.base import get_session_factory
-from drama_smith.db.models import EpisodeCharacter, Task
+from drama_smith.db.models import Analysis, EpisodeCharacter, Task
 from drama_smith.db.repositories import (
     analysis_repo,
     episode_character_repo,
@@ -167,6 +167,14 @@ async def select_current_analysis(
     episode = await episode_repo.get(session, user_id, episode_id)
     await analysis_repo.set_current(session, episode, analysis_id)
     await session.commit()
+
+
+async def list_history(session: AsyncSession, user_id: int, episode_id: int) -> list[Analysis]:
+    """列某剧集全部分析(新→旧;D11「切回历史分镜」picker 用)。
+
+    归属经 `analysis_repo.list_history` 内 episode→drama→user JOIN 校验,越权 / 不存在 → 404。
+    """
+    return await analysis_repo.list_history(session, user_id, episode_id)
 
 
 # ---- work 闭包 + 落库(executor 后台跑,开自己的 session)----

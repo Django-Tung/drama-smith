@@ -85,6 +85,20 @@ async def get_analysis(
     return Envelope(data=summary)
 
 
+@router.get(
+    "/{episode_id}/analyses",
+    summary="列出剧集的分析历史",
+    description="全部分析(新→旧,append-only),供「切回历史分镜」picker(D11)。",
+    response_model=Envelope[list[AnalysisPublic]],
+    responses={**_NOT_FOUND},
+)
+async def list_analyses(
+    episode_id: int, user: UserDep, session: SessionDep
+) -> Envelope[list[AnalysisPublic]]:
+    items = await analysis_service.list_history(session, user.id, episode_id)
+    return Envelope(data=[AnalysisPublic.model_validate(a) for a in items])
+
+
 @router.patch(
     "/{episode_id}/analysis/current",
     summary="切换当前分析",
