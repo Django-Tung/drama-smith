@@ -468,6 +468,56 @@ class TestOptimizePipeline:
         ).json()["data"]
         assert sel["id"] == opt["id"]
 
+    async def test_inflight_query_returns_running_then_null(
+        self,
+        client: AsyncClient,
+        register_user: RegisterUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # 每次「进入剧本 tab 查在途 optimize 任务」端点:运行中返回该 task,完成 / 无则 null。
+        gate = asyncio.Event()
+        monkeypatch.setattr(llm_factory, "build", lambda snap, key: _RoutingTextModel(gate=gate))
+        t = await _register(client, register_user)
+        await _create_text_config(client, t)
+        _, ep = await _seed_episode(client, t)
+
+        # 尚无任何 optimize 任务 → 200 data=null(正常态,非 404)。
+        r = await client.get(f"/api/episodes/{ep}/tasks/inflight?type=optimize", headers=_auth(t))
+        assert r.status_code == 200 and r.json()["data"] is None
+
+        # 发起优化;gate 未置 → 任务可观测地卡在 pending/running。
+        resp = await client.post(f"/api/episodes/{ep}/script/optimize", headers=_auth(t))
+        assert resp.status_code == 202
+        task_id = resp.json()["data"]["id"]
+
+        inflight = await client.get(
+            f"/api/episodes/{ep}/tasks/inflight?type=optimize", headers=_auth(t)
+        )
+        assert inflight.status_code == 200
+        data = inflight.json()["data"]
+        assert data["id"] == task_id
+        assert data["type"] == "optimize"
+        assert data["status"] in ("pending", "running")
+
+        # 释放 gate → 任务成功;终态任务不再是 in-flight → data=null。
+        gate.set()
+        await _poll_task(client, t, task_id)
+        done = await client.get(
+            f"/api/episodes/{ep}/tasks/inflight?type=optimize", headers=_auth(t)
+        )
+        assert done.status_code == 200 and done.json()["data"] is None
+
+        # 非法 type → 422(Literal["analyze","optimize"] 校验)。
+        bad = await client.get(f"/api/episodes/{ep}/tasks/inflight?type=render", headers=_auth(t))
+        assert bad.status_code == 422
+
+        # 跨用户:他人查此剧集 → 404(与其它剧集端点一致,不泄露存在)。
+        t2 = await _register(client, register_user)
+        xuser = await client.get(
+            f"/api/episodes/{ep}/tasks/inflight?type=optimize", headers=_auth(t2)
+        )
+        assert xuser.status_code == 404
+
 
 class TestShotsEdits:
     async def test_patch_split_merge_reorder_and_appearing(

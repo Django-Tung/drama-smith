@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, status
 
@@ -22,7 +22,7 @@ from drama_smith.api.schemas import (
     ScriptVersionPublic,
     TaskPublic,
 )
-from drama_smith.services import episode_service, script_service
+from drama_smith.services import episode_service, script_service, task_service
 
 router = APIRouter(prefix="/episodes", tags=["episodes"])
 
@@ -173,3 +173,25 @@ async def reject_version(
     episode_id: int, version_id: int, user: UserDep, session: SessionDep
 ) -> None:
     await script_service.reject_version(session, user.id, episode_id, version_id)
+
+
+@router.get(
+    "/{episode_id}/tasks/inflight",
+    summary="查询剧集的在途任务",
+    description=(
+        "返回该剧集最近一个 `pending`/`running` 任务(按 `type` 过滤);无则 `data=null`。"
+        "供前端切 tab / 刷新 / 重进页面时恢复轮询(如 optimize 在途任务),替代 sessionStorage。"
+    ),
+    response_model=Envelope[TaskPublic | None],
+    responses={**_NOT_FOUND},
+)
+async def get_inflight_task(
+    episode_id: int,
+    type: Literal["analyze", "optimize"],
+    user: UserDep,
+    session: SessionDep,
+) -> Envelope[TaskPublic | None]:
+    # 越权 / 不存在 → 404(与其它剧集端点一致);无在途 → 200 data=null(正常态,非错误)。
+    await episode_service.get_episode(session, user.id, episode_id)
+    task = await task_service.find_inflight(session, user.id, episode_id, type=type)
+    return Envelope(data=TaskPublic.model_validate(task) if task else None)

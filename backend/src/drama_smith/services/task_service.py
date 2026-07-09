@@ -40,3 +40,20 @@ async def cancel_task(
         )
     await executor.cancel(task_id)
     return task
+
+
+async def find_inflight(
+    session: AsyncSession,
+    user_id: int,
+    episode_id: int,
+    *,
+    type: str,
+) -> Task | None:
+    """该剧集最近一个在途(`pending`/`running`)任务(按 `type` 过滤);无则 None。
+
+    供前端切 tab / 刷新 / 重进页面时查在途任务(如 `optimize`)以恢复轮询——替代
+    sessionStorage(后者会因标签关闭、清缓存等丢失)。后端「在途任务」是单一事实源
+    (与 analyze 经 `summary.inflight_task` 续跑同理)。薄转调
+    `task_repo.find_inflight_by_episode`。
+    """
+    return await task_repo.find_inflight_by_episode(session, user_id, episode_id, type=type)

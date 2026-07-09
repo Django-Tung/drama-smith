@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Check, Sparkles, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Check, Eye, FileText, Sparkles, X } from 'lucide-react'
 
 import { ApiError } from '@/api/errors'
 import { episodesApi } from '@/api/endpoints'
 import { useTaskPolling } from '@/hooks/useTaskPolling'
 import { Field } from '@/components/Field'
+import { Overlay } from '@/components/Overlay'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Markdown } from '@/components/ui/markdown'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDateTime } from '@/utils/format'
@@ -24,6 +26,12 @@ const FORMATS: { value: ScriptFormat; label: string }[] = [
   { value: 'fountain', label: 'Fountain' },
 ]
 
+const FORMAT_LABEL: Record<ScriptFormat, string> = {
+  plain: '纯文本',
+  markdown: 'Markdown',
+  fountain: 'Fountain',
+}
+
 function errMsg(e: unknown, fallback: string): string {
   return ApiError.isApiError(e) ? e.message : fallback
 }
@@ -35,47 +43,24 @@ function taskFailMessage(t: Task, fallback: string): string {
 }
 
 /**
- * 在途 optimize 任务的 sessionStorage 持久化(按剧集)。
- *
- * ScriptTab 随 tab 切换 / 路由离开而 unmount,本地 `optimizeTaskId` 与 `optimizeResult`
- * 会丢失。analyze 轮询能跨刷新续跑是因为后端 `summary.inflight_task` 回报了在途任务;
- * optimize 无此汇总端点,故把任务 id 落 sessionStorage:mounnt 时读回 → 重启轮询。
- * 因 diff 存于任务的 `output_refs`,恢复轮询即可重建进度(运行中)或整版 diff(已成功)。
- * sessionStorage 随标签关闭失效,匹配「在途任务」的时效(避免跨重启复活已被回收的任务)。
- */
-const optimizeTaskStorageKey = (episodeId: number) => `ds-optimize-task:${episodeId}`
-
-function readStoredOptimizeTaskId(episodeId: number): number | null {
-  const raw = sessionStorage.getItem(optimizeTaskStorageKey(episodeId))
-  if (!raw) return null
-  const id = Number(raw)
-  if (!Number.isInteger(id) || id <= 0) {
-    sessionStorage.removeItem(optimizeTaskStorageKey(episodeId))
-    return null
-  }
-  return id
-}
-
-function storeOptimizeTaskId(episodeId: number, taskId: number): void {
-  sessionStorage.setItem(optimizeTaskStorageKey(episodeId), String(taskId))
-}
-
-function clearStoredOptimizeTaskId(episodeId: number): void {
-  sessionStorage.removeItem(optimizeTaskStorageKey(episodeId))
-}
-
-/**
  * 剧本与优化 tab(§13.2)。
  * - 写入剧本:`upsertScript`(整版覆盖、产 `source='input'` 新版本、移 current 指针)。
  * - 版本列表(append-only):标 current;`selectVersion` 切换 / 回退到任一历史版本。
+ *   行内仅预览三行;「查看全文」弹框渲染完整正文(markdown 渲染 / 否则纯文本),可「载入到
+ *   正文编辑」(拷 content + format 入上方编辑区,保存即产新版本)或「切为此版本」(移指针)。
  * - AI 优化(D12):`optimize` 异步 202 → 自带 `useTaskPolling` 轮询;succeeded 收敛
  *   `output_refs` 为 `{version_id, diff}` 驱动只读 `<DiffView>`;整版「接受」(select)/
- *   「拒绝」(reject、版本保留、指针不动)。**无段落勾选 / 部分采纳**。在途任务 id 落
- *   sessionStorage,mount 时读回复跑轮询 → 切 tab / 离开路由 / 刷新不丢进度与 diff。
+ *   「拒绝」(reject、版本保留、指针不动)。**无段落勾选 / 部分采纳**。
+ *
+ * 在途 optimize 续跑:ScriptTab 随 tab 切换 / 路由离开而 unmount,本地 `optimizeTaskId` 会
+ * 丢。每次进入本 tab 查 `getInflightTask(episodeId,'optimize')`(后端单一事实源,与 analyze
+ * 经 `summary.inflight_task` 续跑同理),有在途任务则接续轮询。不落 sessionStorage——后者会
+ * 因标签关闭、清缓存等丢失。
  *
  * 无 script 容器(getScript 404)→ 空状态;optimize 门禁:无当前版本时禁用。
  */
 export function ScriptTab({ episodeId }: { episodeId: number }) {
+  const editorRef = useRef<HTMLDivElement>(null)
   const [versions, setVersions] = useState<ScriptVersion[]>([])
   const [currentVersionId, setCurrentVersionId] = useState<number | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -90,6 +75,7 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
   const [optimizeResult, setOptimizeResult] = useState<OptimizeResult | null>(null)
   const [optimizeError, setOptimizeError] = useState<string | null>(null)
   const [busyVersion, setBusyVersion] = useState<number | null>(null)
+  const [viewVersion, setViewVersion] = useState<ScriptVersion | null>(null)
 
   const load = useCallback(async () => {
     setStatus('loading')
@@ -118,36 +104,42 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
     void load()
   }, [load])
 
-  // 续跑在途 optimize(跨切 tab / 导航 / 刷新):读回任务 id → 重启轮询(进度或重建 diff)。
+  // 每次进入剧本 tab:查在途 optimize 任务,有则接续轮询(替代 sessionStorage;后端单一事实源)。
+  // 仅 `pending`/`running` 视为在途;已 succeeded 的任务不再返回——但其 optimize 版本仍在列表,
+  // 可经「查看全文 / 切为此版本」处理,故无需复活轮询。
   useEffect(() => {
-    const stored = readStoredOptimizeTaskId(episodeId)
-    if (stored != null) setOptimizeTaskId(stored)
+    let cancelled = false
+    void (async () => {
+      try {
+        const t = await episodesApi.getInflightTask(episodeId, 'optimize')
+        if (!cancelled && t) setOptimizeTaskId(t.id)
+      } catch {
+        // 查询失败不阻断(网络抖动等);下次进入再查。
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [episodeId])
 
   // optimize 轮询(self-contained;工作台另挂 analyze 轮询,两实例互不干扰)。
-  // 终态时清 optimizeTaskId 停轮询;succeeded 保留 storage(diff 可跨导航经恢复轮询重建,
-  // 直到 accept/reject),失败 / 无 diff 清 storage(无可恢复产物)。
-  const onOptimizeTerminal = useCallback(
-    (t: Task) => {
-      setOptimizeTaskId(null)
-      if (t.status === 'succeeded') {
-        const r = narrowOptimizeRefs(t.output_refs)
-        if (r) {
-          setOptimizeResult(r)
-          setOptimizeError(null)
-        } else {
-          setOptimizeResult(null)
-          setOptimizeError('优化完成但未返回差异,请重试')
-          clearStoredOptimizeTaskId(episodeId)
-        }
+  // 终态时清 optimizeTaskId 停轮询;succeeded 收敛 output_refs 置 diff(只读,直到接受/拒绝)。
+  const onOptimizeTerminal = useCallback((t: Task) => {
+    setOptimizeTaskId(null)
+    if (t.status === 'succeeded') {
+      const r = narrowOptimizeRefs(t.output_refs)
+      if (r) {
+        setOptimizeResult(r)
+        setOptimizeError(null)
       } else {
         setOptimizeResult(null)
-        setOptimizeError(taskFailMessage(t, '优化失败'))
-        clearStoredOptimizeTaskId(episodeId)
+        setOptimizeError('优化完成但未返回差异,请重试')
       }
-    },
-    [episodeId],
-  )
+    } else {
+      setOptimizeResult(null)
+      setOptimizeError(taskFailMessage(t, '优化失败'))
+    }
+  }, [])
   const oPoll = useTaskPolling(optimizeTaskId, { onTerminal: onOptimizeTerminal })
 
   const saveScript = useCallback(async () => {
@@ -174,7 +166,6 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
     setOptimizeResult(null)
     try {
       const task = await episodesApi.optimize(episodeId)
-      storeOptimizeTaskId(episodeId, task.id)
       setOptimizeTaskId(task.id)
     } catch (e) {
       setOptimizeError(errMsg(e, '发起优化失败'))
@@ -187,7 +178,6 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
       try {
         await episodesApi.selectVersion(episodeId, versionId)
         setOptimizeResult(null)
-        clearStoredOptimizeTaskId(episodeId)
         await load()
       } catch (e) {
         setOptimizeError(errMsg(e, '采纳失败'))
@@ -204,7 +194,6 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
       try {
         await episodesApi.rejectVersion(episodeId, versionId)
         setOptimizeResult(null)
-        clearStoredOptimizeTaskId(episodeId)
       } catch (e) {
         setOptimizeError(errMsg(e, '拒绝失败'))
       } finally {
@@ -230,6 +219,16 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
     [episodeId, load],
   )
 
+  /** 弹框「载入到正文编辑」:拷版本 content + format 进上方编辑区并滚到编辑区。
+   * 保存产 `source='input'` 新版本(非破坏:不动原版本指针)。 */
+  const loadIntoEditor = useCallback((v: ScriptVersion) => {
+    setContent(v.content)
+    setFormat(v.format)
+    setViewVersion(null)
+    setSaveError(null)
+    editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
   const hasScript = currentVersionId != null
   const optimizing = optimizeTaskId != null
   const canSave = content.trim().length > 0 && !saving
@@ -237,7 +236,7 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
   return (
     <div className="space-y-6">
       {/* 写入剧本 */}
-      <section className="space-y-3 rounded-lg border p-4">
+      <section ref={editorRef} className="space-y-3 rounded-lg border p-4">
         <Field label="剧本正文" htmlFor="script-content" error={saveError ?? undefined}>
           <Textarea
             id="script-content"
@@ -338,7 +337,7 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
         ) : null}
       </section>
 
-      {/* 版本列表(append-only;标 current;可切换 / 回退) */}
+      {/* 版本列表(append-only;标 current;可切换 / 回退 / 查看全文) */}
       <section className="space-y-3">
         <h4 className="font-medium">剧本版本</h4>
         {status === 'loading' ? (
@@ -384,12 +383,73 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
                   <p className="line-clamp-3 whitespace-pre-wrap font-serif text-muted-foreground">
                     {v.content}
                   </p>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto px-0 text-muted-foreground"
+                    onClick={() => setViewVersion(v)}
+                  >
+                    <Eye className="mr-1 size-3.5" />
+                    查看全文 / 载入编辑
+                  </Button>
                 </li>
               )
             })}
           </ul>
         )}
       </section>
+
+      {/* 版本全文弹框:渲染完整正文(markdown 渲染 / 否则纯文本)+ 载入正文编辑 / 切换版本 */}
+      {viewVersion ? (
+        <Overlay
+          title={`剧本版本 v${viewVersion.version_no}`}
+          onClose={() => setViewVersion(null)}
+          maxWidthClass="max-w-3xl"
+        >
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant={viewVersion.source === 'optimize' ? 'outline' : 'secondary'}>
+                {viewVersion.source === 'optimize' ? 'AI 优化' : '输入'}
+              </Badge>
+              <Badge variant="outline">{FORMAT_LABEL[viewVersion.format]}</Badge>
+              {viewVersion.id === currentVersionId ? <Badge>当前</Badge> : null}
+              <span className="text-xs text-muted-foreground">
+                {formatDateTime(viewVersion.created_at)}
+              </span>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto rounded-md border p-4">
+              {viewVersion.format === 'markdown' ? (
+                <Markdown>{viewVersion.content}</Markdown>
+              ) : (
+                <pre className="whitespace-pre-wrap font-serif text-sm">
+                  {viewVersion.content}
+                </pre>
+              )}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="ghost" onClick={() => setViewVersion(null)}>
+                关闭
+              </Button>
+              <Button variant="outline" onClick={() => loadIntoEditor(viewVersion)}>
+                <FileText className="mr-2 size-4" />
+                载入到正文编辑
+              </Button>
+              {viewVersion.id !== currentVersionId ? (
+                <Button
+                  onClick={() => {
+                    setViewVersion(null)
+                    void pickVersion(viewVersion.id)
+                  }}
+                  disabled={busyVersion != null}
+                >
+                  <Check className="mr-2 size-4" />
+                  切为此版本
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </Overlay>
+      ) : null}
     </div>
   )
 }

@@ -221,6 +221,19 @@ export const episodesApi = {
       { method: 'POST' },
     )
   },
+
+  /**
+   * 查询剧集在途任务(按 type);无在途 → 200 data=null(正常态,非 404)。供切 tab / 刷新 /
+   * 重进页面时恢复 optimize 轮询——替代 sessionStorage(后者会因标签关闭、清缓存等丢失)。
+   */
+  getInflightTask(
+    episodeId: number,
+    type: 'analyze' | 'optimize',
+  ): Promise<Task | null> {
+    return request<Task | null>(`/api/episodes/${episodeId}/tasks/inflight`, {
+      query: { type },
+    })
+  },
 }
 
 /**
