@@ -35,12 +35,43 @@ function taskFailMessage(t: Task, fallback: string): string {
 }
 
 /**
+ * 在途 optimize 任务的 sessionStorage 持久化(按剧集)。
+ *
+ * ScriptTab 随 tab 切换 / 路由离开而 unmount,本地 `optimizeTaskId` 与 `optimizeResult`
+ * 会丢失。analyze 轮询能跨刷新续跑是因为后端 `summary.inflight_task` 回报了在途任务;
+ * optimize 无此汇总端点,故把任务 id 落 sessionStorage:mounnt 时读回 → 重启轮询。
+ * 因 diff 存于任务的 `output_refs`,恢复轮询即可重建进度(运行中)或整版 diff(已成功)。
+ * sessionStorage 随标签关闭失效,匹配「在途任务」的时效(避免跨重启复活已被回收的任务)。
+ */
+const optimizeTaskStorageKey = (episodeId: number) => `ds-optimize-task:${episodeId}`
+
+function readStoredOptimizeTaskId(episodeId: number): number | null {
+  const raw = sessionStorage.getItem(optimizeTaskStorageKey(episodeId))
+  if (!raw) return null
+  const id = Number(raw)
+  if (!Number.isInteger(id) || id <= 0) {
+    sessionStorage.removeItem(optimizeTaskStorageKey(episodeId))
+    return null
+  }
+  return id
+}
+
+function storeOptimizeTaskId(episodeId: number, taskId: number): void {
+  sessionStorage.setItem(optimizeTaskStorageKey(episodeId), String(taskId))
+}
+
+function clearStoredOptimizeTaskId(episodeId: number): void {
+  sessionStorage.removeItem(optimizeTaskStorageKey(episodeId))
+}
+
+/**
  * 剧本与优化 tab(§13.2)。
  * - 写入剧本:`upsertScript`(整版覆盖、产 `source='input'` 新版本、移 current 指针)。
  * - 版本列表(append-only):标 current;`selectVersion` 切换 / 回退到任一历史版本。
  * - AI 优化(D12):`optimize` 异步 202 → 自带 `useTaskPolling` 轮询;succeeded 收敛
  *   `output_refs` 为 `{version_id, diff}` 驱动只读 `<DiffView>`;整版「接受」(select)/
- *   「拒绝」(reject、版本保留、指针不动)。**无段落勾选 / 部分采纳**。
+ *   「拒绝」(reject、版本保留、指针不动)。**无段落勾选 / 部分采纳**。在途任务 id 落
+ *   sessionStorage,mount 时读回复跑轮询 → 切 tab / 离开路由 / 刷新不丢进度与 diff。
  *
  * 无 script 容器(getScript 404)→ 空状态;optimize 门禁:无当前版本时禁用。
  */
@@ -87,23 +118,36 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
     void load()
   }, [load])
 
+  // 续跑在途 optimize(跨切 tab / 导航 / 刷新):读回任务 id → 重启轮询(进度或重建 diff)。
+  useEffect(() => {
+    const stored = readStoredOptimizeTaskId(episodeId)
+    if (stored != null) setOptimizeTaskId(stored)
+  }, [episodeId])
+
   // optimize 轮询(self-contained;工作台另挂 analyze 轮询,两实例互不干扰)。
-  const onOptimizeTerminal = useCallback((t: Task) => {
-    setOptimizeTaskId(null)
-    if (t.status === 'succeeded') {
-      const r = narrowOptimizeRefs(t.output_refs)
-      if (r) {
-        setOptimizeResult(r)
-        setOptimizeError(null)
+  // 终态时清 optimizeTaskId 停轮询;succeeded 保留 storage(diff 可跨导航经恢复轮询重建,
+  // 直到 accept/reject),失败 / 无 diff 清 storage(无可恢复产物)。
+  const onOptimizeTerminal = useCallback(
+    (t: Task) => {
+      setOptimizeTaskId(null)
+      if (t.status === 'succeeded') {
+        const r = narrowOptimizeRefs(t.output_refs)
+        if (r) {
+          setOptimizeResult(r)
+          setOptimizeError(null)
+        } else {
+          setOptimizeResult(null)
+          setOptimizeError('优化完成但未返回差异,请重试')
+          clearStoredOptimizeTaskId(episodeId)
+        }
       } else {
         setOptimizeResult(null)
-        setOptimizeError('优化完成但未返回差异,请重试')
+        setOptimizeError(taskFailMessage(t, '优化失败'))
+        clearStoredOptimizeTaskId(episodeId)
       }
-    } else {
-      setOptimizeResult(null)
-      setOptimizeError(taskFailMessage(t, '优化失败'))
-    }
-  }, [])
+    },
+    [episodeId],
+  )
   const oPoll = useTaskPolling(optimizeTaskId, { onTerminal: onOptimizeTerminal })
 
   const saveScript = useCallback(async () => {
@@ -130,6 +174,7 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
     setOptimizeResult(null)
     try {
       const task = await episodesApi.optimize(episodeId)
+      storeOptimizeTaskId(episodeId, task.id)
       setOptimizeTaskId(task.id)
     } catch (e) {
       setOptimizeError(errMsg(e, '发起优化失败'))
@@ -142,6 +187,7 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
       try {
         await episodesApi.selectVersion(episodeId, versionId)
         setOptimizeResult(null)
+        clearStoredOptimizeTaskId(episodeId)
         await load()
       } catch (e) {
         setOptimizeError(errMsg(e, '采纳失败'))
@@ -158,6 +204,7 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
       try {
         await episodesApi.rejectVersion(episodeId, versionId)
         setOptimizeResult(null)
+        clearStoredOptimizeTaskId(episodeId)
       } catch (e) {
         setOptimizeError(errMsg(e, '拒绝失败'))
       } finally {
