@@ -86,12 +86,18 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
       const vers = await episodesApi.listScriptVersions(episodeId)
       setCurrentVersionId(script.current_version_id)
       setVersions(vers)
+      // 当前版本预填进正文编辑区:进入 / 保存 / 切换版本后,输入框即显示 current,
+      // 用户可直接在其上改动(保存产 source=input 新版本)。current 为 null(无剧本)→ 空。
+      const current = vers.find((v) => v.id === script.current_version_id) ?? null
+      setContent(current?.content ?? '')
+      setFormat(current?.format ?? 'markdown')
       setStatus('ready')
     } catch (e) {
       if (ApiError.isApiError(e) && e.status === 404) {
         // 尚未写过剧本:无 script 容器 → 空状态。
         setCurrentVersionId(null)
         setVersions([])
+        setContent('')
         setStatus('ready')
       } else {
         setError(errMsg(e, '加载剧本失败'))
@@ -152,7 +158,7 @@ export function ScriptTab({ episodeId }: { episodeId: number }) {
     setSaveError(null)
     try {
       await episodesApi.upsertScript(episodeId, { content: c, format })
-      setContent('')
+      // 不手动清空:load() 会把新 current(刚保存的版本)填回编辑区。
       await load()
     } catch (e) {
       setSaveError(errMsg(e, '保存剧本失败'))
