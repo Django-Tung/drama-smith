@@ -104,8 +104,8 @@
 
 ## 12. 前端类型与 API 客户端
 
-- [ ] 12.1 `frontend/src/types/`:`Drama`/`Episode`/`AspectRatio`/`EpisodeStatus`/`Script`/`ScriptVersion`/`ScriptFormat`/`EpisodeCharacter`/`AnalysisResult`(四维)/`AnalysisSummary`(`{current_analysis, inflight_task?, stale_flag}`,D11)/`Shot`/`ShotType`/`Task`/`TaskStatus`/`TaskType`;`index.ts` re-export;`tsc` 全绿
-- [ ] 12.2 `frontend/src/api/endpoints.ts`:新增 `dramasApi`/`episodesApi`(含 script/optimize)/`charactersApi`/`analysisApi`/`shotsApi`/`tasksApi`,复用 M0 `request` 封装(401 自动刷新、204→null);`tsc`+`eslint` 全绿
+- [x] 12.1 `frontend/src/types/`:`Drama`/`Episode`/`AspectRatio`/`EpisodeStatus`/`Script`/`ScriptVersion`/`ScriptFormat`/`EpisodeCharacter`/`AnalysisResult`(四维)/`AnalysisSummary`(`{current_analysis, inflight_task?, stale_flag}`,D11)/`Shot`/`ShotType`/`Task`/`TaskStatus`/`TaskType`;`index.ts` re-export;`tsc` 全绿
+- [x] 12.2 `frontend/src/api/endpoints.ts`:新增 `dramasApi`/`episodesApi`(含 script/optimize)/`charactersApi`/`analysisApi`/`shotsApi`/`tasksApi`,复用 M0 `request` 封装(401 自动刷新、204→null);`tsc`+`eslint` 全绿
 
 ## 13. 前端剧库 + 剧集工作台 + 分镜编辑台
 
