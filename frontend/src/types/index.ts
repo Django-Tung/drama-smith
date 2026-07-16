@@ -37,6 +37,8 @@ export type {
   EpisodeCreate,
   EpisodeStatus,
   EpisodeUpdate,
+  MediaPublic,
+  MediaSource,
   Script,
   ScriptFormat,
   ScriptUpsert,

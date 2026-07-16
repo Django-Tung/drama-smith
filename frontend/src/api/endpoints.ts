@@ -12,6 +12,7 @@ import type {
   EpisodeCreate,
   EpisodeUpdate,
   LoginRequest,
+  MediaPublic,
   ModelConfig,
   ModelConfigCreate,
   ModelConfigUpdate,
@@ -276,6 +277,40 @@ export const charactersApi = {
     await request<unknown>(`/api/episodes/${episodeId}/characters/${characterId}`, {
       method: 'DELETE',
     })
+  },
+
+  /**
+   * 取当前形象图;无图 → 后端 204,前端得 `null`。返回含 `<img src>` 直用的签名 URL
+   * (短期 token,内容端点不校 Bearer,token 即凭证)。挂载 / 上传 / 生成终态后调用刷新。
+   */
+  getPortrait(episodeId: number, characterId: number): Promise<MediaPublic | null> {
+    return request<MediaPublic | null>(
+      `/api/episodes/${episodeId}/characters/${characterId}/portrait`,
+    )
+  },
+
+  /**
+   * 上传形象图(multipart):后端校大小 + 解码压缩 + 落盘 + 置当前选中,201 返回新 media。
+   * `request` 对 `FormData` 不设 Content-Type,由浏览器带 boundary;返新 `MediaPublic`。
+   */
+  uploadPortrait(episodeId: number, characterId: number, file: File): Promise<MediaPublic> {
+    const form = new FormData()
+    form.append('file', file)
+    return request<MediaPublic>(
+      `/api/episodes/${episodeId}/characters/${characterId}/portrait/upload`,
+      { method: 'POST', body: form },
+    )
+  },
+
+  /**
+   * 发起 AI 形象图生成:门禁(active 图片配置 + 角色外貌描述非空)通过 → 202 返回 task。
+   * 前端轮询 `GET /api/tasks/:id`,终态 succeeded 后调 `getPortrait` 刷新头像。
+   */
+  generatePortrait(episodeId: number, characterId: number): Promise<Task> {
+    return request<Task>(
+      `/api/episodes/${episodeId}/characters/${characterId}/portrait/generate`,
+      { method: 'POST' },
+    )
   },
 }
 

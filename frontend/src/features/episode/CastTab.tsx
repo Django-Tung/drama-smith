@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Pencil, Plus, Trash2, Wand2 } from 'lucide-react'
+import { Pencil, Plus, Trash2, Upload, Wand2 } from 'lucide-react'
 
 import { ApiError } from '@/api/errors'
 import { analysisApi, charactersApi } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
+import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Overlay } from '@/components/Overlay'
 import { Spinner } from '@/components/ui/spinner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useTaskPolling } from '@/hooks/useTaskPolling'
 import { cn } from '@/utils/cn'
 import { formatDateTime } from '@/utils/format'
 import type {
@@ -16,6 +19,7 @@ import type {
   AnalysisResult,
   AnalysisSummary,
   EpisodeCharacter,
+  MediaPublic,
   Task,
 } from '@/types'
 import { CharacterForm } from './CharacterForm'
@@ -63,6 +67,7 @@ export function CastTab({
   onSummaryRefresh,
 }: CastTabProps) {
   const configured = useAuthStore((s) => s.user?.text_model_configured) ?? false
+  const imageConfigured = useAuthStore((s) => s.user?.image_model_configured) ?? false
   const analyzing = analyzeTask != null
 
   const [characters, setCharacters] = useState<EpisodeCharacter[]>([])
@@ -303,6 +308,8 @@ export function CastTab({
         ) : (
           <div className="space-y-4">
             <CharacterGroup
+              episodeId={episodeId}
+              imageConfigured={imageConfigured}
               title="预置角色"
               empty="尚无预置角色。"
               items={presetChars}
@@ -312,6 +319,8 @@ export function CastTab({
               onDelete={(c) => setConfirmDelete(c)}
             />
             <CharacterGroup
+              episodeId={episodeId}
+              imageConfigured={imageConfigured}
               title="拆解角色"
               empty="无(发起拆解后由 LLM 产出)。"
               items={analysisChars}
@@ -387,8 +396,10 @@ export function CastTab({
   )
 }
 
-/** 角色分组(preset 可编辑;analysis 只读 + note)。 */
+/** 角色分组(preset 可编辑;analysis 只读 + note);每卡含形象图(上传 / AI 生成)。 */
 function CharacterGroup({
+  episodeId,
+  imageConfigured,
   title,
   empty,
   items,
@@ -398,6 +409,8 @@ function CharacterGroup({
   onEdit,
   onDelete,
 }: {
+  episodeId: number
+  imageConfigured: boolean
   title: string
   empty: string
   items: EpisodeCharacter[]
@@ -423,58 +436,234 @@ function CharacterGroup({
       ) : (
         <ul className="space-y-2">
           {items.map((c) => (
-            <li key={c.id} className="rounded-md border p-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">{c.name}</span>
-                {c.role_type ? (
-                  <Badge variant="secondary" className="text-xs">
-                    {c.role_type}
-                  </Badge>
-                ) : null}
-                {canEdit ? (
-                  <div className="ml-auto flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="编辑"
-                      onClick={() => onEdit?.(c)}
-                      disabled={busy != null}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="删除"
-                      onClick={() => onDelete?.(c)}
-                      disabled={busy != null}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-              {c.persona ? <p className="mt-1 text-muted-foreground">人设:{c.persona}</p> : null}
-              {c.motivation ? (
-                <p className="text-muted-foreground">动机:{c.motivation}</p>
-              ) : null}
-              {c.traits && c.traits.length ? (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {c.traits.map((t, i) => (
-                    <Badge key={i} variant="outline" className="text-xs">
-                      {t}
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
-              {c.appearance_desc ? (
-                <p className="mt-1 text-muted-foreground">外貌:{c.appearance_desc}</p>
-              ) : null}
-            </li>
+            <CharacterCard
+              key={c.id}
+              episodeId={episodeId}
+              character={c}
+              imageConfigured={imageConfigured}
+              canEdit={canEdit}
+              busy={busy}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
           ))}
         </ul>
       )}
     </div>
+  )
+}
+
+/**
+ * 单角色卡(character-media §9.4):头像展示 + 文本字段 + 形象图上传 / AI 生成。
+ * - 头像:`getPortrait` 拉签名 URL(`<Avatar>` 直用);挂载 / 上传 / 生成终态后刷新。
+ * - 上传:隐藏 `<input type=file accept=image/*>` → `uploadPortrait`(201)→ 刷新头像。
+ * - AI 生成:`generatePortrait`(202)→ `useTaskPolling` 终态 succeeded 后刷新头像。
+ * - 门禁:`image_model_configured` 假 或 `appearance_desc` 空 → 禁用「AI 生成」+ tooltip 提示。
+ *   (形象图为角色附加属性,preset / analysis 两源均可上传 / 生成,与文本字段是否可编辑解耦。)
+ */
+function CharacterCard({
+  episodeId,
+  character,
+  imageConfigured,
+  canEdit,
+  busy,
+  onEdit,
+  onDelete,
+}: {
+  episodeId: number
+  character: EpisodeCharacter
+  imageConfigured: boolean
+  canEdit?: boolean
+  /** 全局角色 CRUD 在途编号(与 CharacterGroup 一致);文本字段按钮据此禁用。 */
+  busy?: number | 'new' | null
+  onEdit?: (c: EpisodeCharacter) => void
+  onDelete?: (c: EpisodeCharacter) => void
+}) {
+  const [portrait, setPortrait] = useState<MediaPublic | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [imageTaskId, setImageTaskId] = useState<number | null>(null)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const loadPortrait = useCallback(async () => {
+    try {
+      setPortrait(await charactersApi.getPortrait(episodeId, character.id))
+    } catch {
+      // 形象图为体验增强;加载失败不阻断卡片(204 无图已得 null)。
+    }
+  }, [episodeId, character.id])
+
+  useEffect(() => {
+    void loadPortrait()
+  }, [loadPortrait])
+
+  const { task: imageTask, cancel: cancelImage } = useTaskPolling(imageTaskId, {
+    onTerminal: (t) => {
+      setImageTaskId(null)
+      if (t.status === 'succeeded') {
+        void loadPortrait()
+        return
+      }
+      const msg = t.error?.message
+      setImageError(typeof msg === 'string' ? msg : t.status === 'canceled' ? '已取消' : '生成失败')
+    },
+  })
+
+  const appearanceFilled = (character.appearance_desc ?? '').trim() !== ''
+  const canGen = imageConfigured && appearanceFilled
+  const textBusy = busy != null
+  const cardBusy = uploading || imageTask != null
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      setUploading(true)
+      setImageError(null)
+      try {
+        setPortrait(await charactersApi.uploadPortrait(episodeId, character.id, file))
+      } catch (e) {
+        setImageError(errMsg(e, '上传失败'))
+      } finally {
+        setUploading(false)
+      }
+    },
+    [episodeId, character.id],
+  )
+
+  const handleGenerate = useCallback(async () => {
+    setImageError(null)
+    try {
+      const task = await charactersApi.generatePortrait(episodeId, character.id)
+      setImageTaskId(task.id)
+    } catch (e) {
+      setImageError(errMsg(e, '发起生成失败'))
+    }
+  }, [episodeId, character.id])
+
+  return (
+    <li className="rounded-md border p-3 text-sm">
+      <div className="flex items-start gap-3">
+        <Avatar
+          src={portrait?.signed_url}
+          name={character.name}
+          size={40}
+          className={cn(uploading && 'opacity-60')}
+        />
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{character.name}</span>
+            {character.role_type ? (
+              <Badge variant="secondary" className="text-xs">
+                {character.role_type}
+              </Badge>
+            ) : null}
+            {canEdit ? (
+              <div className="ml-auto flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="编辑"
+                  onClick={() => onEdit?.(character)}
+                  disabled={textBusy}
+                >
+                  <Pencil />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="删除"
+                  onClick={() => onDelete?.(character)}
+                  disabled={textBusy}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          {character.persona ? (
+            <p className="text-muted-foreground">人设:{character.persona}</p>
+          ) : null}
+          {character.motivation ? (
+            <p className="text-muted-foreground">动机:{character.motivation}</p>
+          ) : null}
+          {character.traits && character.traits.length ? (
+            <div className="flex flex-wrap gap-1">
+              {character.traits.map((t, i) => (
+                <Badge key={i} variant="outline" className="text-xs">
+                  {t}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+          {character.appearance_desc ? (
+            <p className="text-muted-foreground">外貌:{character.appearance_desc}</p>
+          ) : null}
+
+          {/* 形象图操作:上传(multipart)+ AI 生成(异步轮询);门禁禁用 AI 生成 */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = '' // 允许重复选同一文件
+                if (f) void handleFile(f)
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={cardBusy}
+            >
+              <Upload />
+              {uploading ? '上传中…' : portrait ? '更换图片' : '上传图片'}
+            </Button>
+            {canGen ? (
+              <Button size="sm" onClick={() => void handleGenerate()} disabled={cardBusy}>
+                <Wand2 />
+                {imageTask ? '生成中…' : 'AI 生成'}
+              </Button>
+            ) : (
+              <Tooltip>
+                {/* span 包裹:disabled 按钮自身不收 pointer 事件,用 span 承载 hover 显 tooltip */}
+                <TooltipTrigger asChild>
+                  <span tabIndex={0} className="inline-flex">
+                    <Button size="sm" disabled>
+                      <Wand2 />
+                      AI 生成
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {imageConfigured ? '需先填写「外貌描述」' : '未配置图片模型,去「设置」开启'}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+
+          {imageTask ? (
+            <div className="space-y-1 rounded-md border p-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{imageTask.stage ?? '生成中'}</span>
+                <span className="font-mono">{imageTask.progress}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-[width]"
+                  style={{ width: `${Math.max(2, imageTask.progress)}%` }}
+                />
+              </div>
+              <Button variant="ghost" size="xs" onClick={() => void cancelImage()}>
+                取消
+              </Button>
+            </div>
+          ) : null}
+          {imageError ? <p className="text-sm font-medium text-destructive">{imageError}</p> : null}
+        </div>
+      </div>
+    </li>
   )
 }
 

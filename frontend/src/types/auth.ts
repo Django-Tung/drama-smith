@@ -9,6 +9,8 @@ export interface User {
   username: string
   /** 是否已配置 active 文本模型(setup-byok-config:`has_active_text` 真值,前端据此路由向导)。 */
   text_model_configured: boolean
+  /** 是否已配置 active 图片模型(character-media 形象图门禁信号;缺则禁用「AI 生成」)。 */
+  image_model_configured: boolean
 }
 
 /** 访问令牌响应(POST /api/auth/refresh:仅换发新 access)。 */

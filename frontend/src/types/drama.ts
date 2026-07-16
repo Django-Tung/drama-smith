@@ -20,8 +20,8 @@ export type ShotType = 'wide' | 'medium' | 'close' | 'extreme_close'
 /** 剧集状态(Episode.status;M2 主要落在 draft/analyzing/ready)。 */
 export type EpisodeStatus = 'draft' | 'analyzing' | 'ready' | 'rendering' | 'done'
 
-/** 任务类型(Task.type;M2 仅 analyze / optimize)。 */
-export type TaskType = 'analyze' | 'optimize'
+/** 任务类型(Task.type;analyze / optimize 见 M2,image = 角色形象图异步生成,见 character-media)。 */
+export type TaskType = 'analyze' | 'optimize' | 'image'
 
 /**
  * 任务状态(Task.status)。
@@ -90,10 +90,32 @@ export interface EpisodeCharacter {
   motivation: string | null
   traits: string[] | null
   appearance_desc: string | null
+  /** 当前形象图指针(null=无形象图;逻辑指针无 FK,见 character-media)。 */
+  image_media_id: number | null
   source: 'preset' | 'analysis'
   sort_order: number
   created_at: string
   updated_at: string
+}
+
+// ---- 富媒体(character-media;本期角色形象图)----
+
+/** 媒体来源(Media.source)。 */
+export type MediaSource = 'upload' | 'generate'
+
+/**
+ * 富媒体对外视图(media 元数据 + 短期签名 URL;本期 `kind='image'` 形象图)。
+ * `signed_url` 为后端签发的相对 URL,`<img src>` 直用(无 Authorization 头)。
+ * 对齐后端 `api/schemas.py::MediaPublic`。
+ */
+export interface MediaPublic {
+  media_id: number
+  signed_url: string
+  content_type: string | null
+  width: number | null
+  height: number | null
+  source: MediaSource
+  created_at: string
 }
 
 // ---- 四维分析产物(Analysis.result;LLM 产出,已知字段 + 索引兜底)----
