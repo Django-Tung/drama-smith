@@ -1,8 +1,9 @@
 """`episode_characters` 表模型(对齐 `docs/tech-solution/database.md` §3.5)。
 
-剧集内富字段角色(预置 / 拆解产出 / 库引入)。**M2 裁剪**:`source` 仅 `preset|analysis`
-(无 `library`,留待 M4 角色库;无 `image_media_id`,留待 M3 形象图)。
-归属经 `episode_id → dramas.user_id` 链(D1),不在本表冗余 `user_id`。
+剧集内富字段角色(预置 / 拆解产出 / 库引入)。`source` 仅 `preset|analysis`(`library` 留待 M4
+角色库)。**M3**:`image_media_id` 指向当前选用形象图 `media` 行(逻辑指针,不加物理 FK——避免
+与 `media.owner_id` 指回 character 的循环外键,与 `episodes.current_analysis_id` 同构 D3);归属由
+应用层把关。归属经 `episode_id → dramas.user_id` 链(D1),不在本表冗余 `user_id`。
 """
 
 from __future__ import annotations
@@ -37,7 +38,12 @@ class EpisodeCharacter(TimestampMixin, Base):
     motivation: Mapped[str | None] = mapped_column(String(512), nullable=True)
     traits: Mapped[list | None] = mapped_column(JSON, nullable=True)
     appearance_desc: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    # M2:`source` 仅 preset|analysis(library 留 M4;image_media_id 留 M3)。
+    # M3:当前选用形象图 media 行 id(逻辑指针,无 FK);NULL=未设形象图。
+    image_media_id: Mapped[int | None] = mapped_column(
+        BigInteger().with_variant(BIGINT(unsigned=True), "mysql"),
+        nullable=True,
+    )
+    # `source` 仅 preset|analysis(library 留 M4)。
     source: Mapped[str] = mapped_column(
         Enum("preset", "analysis", native_enum=True),
         nullable=False,

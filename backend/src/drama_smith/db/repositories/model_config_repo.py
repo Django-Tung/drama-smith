@@ -172,6 +172,34 @@ async def get_active_text_config(
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def get_active_image_config(
+    session: AsyncSession, user_id: int
+) -> ModelConfig | None:
+    """取该用户当前 active 且 `status='active'` 的图片配置;无则 None(M3 形象图门禁用)。
+
+    与 `get_active_text_config` 同范式(镜像 text);`invalid` 配置不可用于生成(D8)。
+    """
+    stmt = select(ModelConfig).where(
+        ModelConfig.user_id == user_id,
+        ModelConfig.purpose == "image",
+        ModelConfig.is_active.is_(True),
+        ModelConfig.status == "active",
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def has_active_image(session: AsyncSession, user_id: int) -> bool:
+    """该用户是否存在 active 图片配置(`GET /api/me` 完成度信号,镜像 `has_active_text`)。"""
+    stmt = select(
+        exists().where(
+            ModelConfig.user_id == user_id,
+            ModelConfig.purpose == "image",
+            ModelConfig.is_active.is_(True),
+        )
+    )
+    return bool((await session.execute(stmt)).scalar())
+
+
 async def activate(session: AsyncSession, user_id: int, config_id: int) -> ModelConfig:
     """单事务内:先把同 `(user_id, purpose)` 的其它 active 置 0,再置目标为 1(design D3)。
 

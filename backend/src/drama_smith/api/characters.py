@@ -7,19 +7,22 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, File, Response, UploadFile, status
 
-from drama_smith.api.deps import SessionDep, UserDep
+from drama_smith.api.deps import ExecutorDep, FileStoreDep, MekDep, SessionDep, UserDep
 from drama_smith.api.schemas import (
     CharacterCreate,
     CharacterUpdate,
     Envelope,
     EpisodeCharacterPublic,
     ErrorResponse,
+    MediaPublic,
+    TaskPublic,
 )
-from drama_smith.services import character_service
+from drama_smith.core.config import get_settings
+from drama_smith.services import character_media_service, character_service
 
 router = APIRouter(prefix="/episodes", tags=["characters"])
 
@@ -111,3 +114,114 @@ async def delete_character(
     episode_id: int, character_id: int, user: UserDep, session: SessionDep
 ) -> None:
     await character_service.delete_character(session, user.id, episode_id, character_id)
+
+
+# ---- 角色形象图(M3;upload 同步 / generate 异步 / get 读当前;design D5/D6/D8)----
+# 端点拆 upload / generate(偏离 architecture §3.3 的「合一」为清晰分责,见 design D6)。
+# get 无形象图 → 204(无 body);upload 201 + 签名 URL;generate 202 + 轮询 task。
+
+_UPLOAD_ERR: dict[int | str, dict[str, Any]] = {
+    413: {"model": ErrorResponse, "description": "上传超过硬上限(media_too_large)"},
+    422: {
+        "model": ErrorResponse,
+        "description": "上传内容非图片 / 不支持格式(media_invalid)",
+    },
+}
+_GENERATE_ERR: dict[int | str, dict[str, Any]] = {
+    409: {
+        "model": ErrorResponse,
+        "description": (
+            "无 active 图片配置(model_not_configured)/ 角色未填外形描述(invalid_state)"
+        ),
+    },
+}
+
+
+@router.get(
+    "/{episode_id}/characters/{character_id}/portrait",
+    summary="读取角色当前形象图",
+    description="取角色当前选用形象图 + 短期签名 URL(`<img src>` 直用);无形象图 → 204。",
+    response_model=Envelope[MediaPublic],
+    responses={
+        204: {"description": "该角色尚无形象图"},
+        **_NOT_FOUND,
+    },
+)
+async def get_character_portrait(
+    episode_id: int,
+    character_id: int,
+    user: UserDep,
+    session: SessionDep,
+    file_store: FileStoreDep,
+) -> Envelope[MediaPublic] | Response:
+    view = await character_media_service.get_portrait(
+        session, user.id, episode_id, character_id, file_store=file_store
+    )
+    if view is None:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return Envelope(data=MediaPublic.model_validate(view))
+
+
+@router.post(
+    "/{episode_id}/characters/{character_id}/portrait/upload",
+    summary="上传角色形象图",
+    description=(
+        "multipart 上传图片(jpg/png/webp);Pillow 校验 + 超 1 MiB 递降 JPEG 压缩,"
+        "同步落库返签名 URL。硬上限见 `DS_MEDIA_UPLOAD_MAX_BYTES`(默认 10 MiB)。"
+    ),
+    response_model=Envelope[MediaPublic],
+    status_code=status.HTTP_201_CREATED,
+    responses={**_NOT_FOUND, **_UPLOAD_ERR},
+)
+async def upload_character_portrait(
+    episode_id: int,
+    character_id: int,
+    user: UserDep,
+    session: SessionDep,
+    file_store: FileStoreDep,
+    file: Annotated[UploadFile, File(description="图片文件(jpg/png/webp)")],
+) -> Envelope[MediaPublic]:
+    data = await file.read()
+    settings = get_settings()
+    view = await character_media_service.upload_portrait(
+        session,
+        user.id,
+        episode_id,
+        character_id,
+        file_store=file_store,
+        data=data,
+        max_bytes=settings.media_upload_max_bytes,
+    )
+    return Envelope(data=MediaPublic.model_validate(view))
+
+
+@router.post(
+    "/{episode_id}/characters/{character_id}/portrait/generate",
+    summary="AI 生成角色形象图",
+    description=(
+        "门禁(active 图片配置 + 角色已填 `appearance_desc`)→ 异步生成(202 + 轮询 task)。"
+        "成功 task `output_refs.media_id` 指向新生成的形象图。"
+    ),
+    response_model=Envelope[TaskPublic],
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={**_NOT_FOUND, **_GENERATE_ERR},
+)
+async def generate_character_portrait(
+    episode_id: int,
+    character_id: int,
+    user: UserDep,
+    session: SessionDep,
+    mek: MekDep,
+    file_store: FileStoreDep,
+    executor: ExecutorDep,
+) -> Envelope[TaskPublic]:
+    task = await character_media_service.generate_portrait(
+        session,
+        user.id,
+        episode_id,
+        character_id,
+        mek=mek,
+        file_store=file_store,
+        executor=executor,
+    )
+    return Envelope(data=TaskPublic.model_validate(task))

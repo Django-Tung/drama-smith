@@ -148,6 +148,31 @@ class ScriptRequired(DomainError):
     default_message = "Episode has no script yet; please input one before analyzing"
 
 
+class MediaTooLarge(DomainError):
+    """上传媒体超过硬上限(413;M3 形象图防滥用 DoS)。
+
+    软压缩阈 1 MiB(Pillow 递降 JPEG 质量重压);`DS_MEDIA_UPLOAD_MAX_BYTES`(默认 10 MiB)为
+    请求体硬上限,超过直接拒——避免超大原图耗尽内存/带宽。
+    """
+
+    code = "media_too_large"
+    status_code = 413
+    default_message = "Uploaded media exceeds the maximum allowed size"
+
+
+class MediaInvalid(DomainError):
+    """媒体内容无法识别或格式不支持(422;M3 上传非图片 / 生成图损坏)。
+
+    上传侧:同步解码失败 / 非 jpg·png·webp → 422(客户端可换文件重传)。
+    生成侧:work 闭包内下载字节解码失败 → 落 task `failed`(`error.code=media_invalid`)。
+    与「角色状态未就绪」(invalid_state,409)区分:此处是内容本身不合规。
+    """
+
+    code = "media_invalid"
+    status_code = 422
+    default_message = "Media content is invalid or in an unsupported format"
+
+
 # HTTP 状态 → 错误码兜底映射。主要服务 FastAPI/Starlette 自身抛出的 `HTTPException`,
 # 例如 OAuth2 缺失令牌的 401、未匹配路由的 404;未列出的 5xx 归 `internal_error`。
 _STATUS_TO_CODE: dict[int, str] = {
@@ -241,6 +266,8 @@ __all__ = [
     "DomainError",
     "InvalidState",
     "Locked",
+    "MediaInvalid",
+    "MediaTooLarge",
     "ModelNotConfigured",
     "NotFound",
     "ProviderAuthFailed",

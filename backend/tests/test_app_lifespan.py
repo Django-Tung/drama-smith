@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from drama_smith.db.base import get_session_factory
 from drama_smith.db.repositories import task_repo, user_repo
 from drama_smith.main import create_app, lifespan
+from drama_smith.storage import LocalFileStore
 from drama_smith.tasks import TaskExecutor
 
 
@@ -29,6 +30,8 @@ async def test_lifespan_injects_executor_and_recovers_running(
     async with lifespan(app):
         # 启动期已构造并注入执行器
         assert isinstance(app.state.executor, TaskExecutor)
+        # 启动期已构造并注入 FileStore(本地磁盘 + ensure_root,M3)
+        assert isinstance(app.state.file_store, LocalFileStore)
         # recover_running 已跑过 → 该任务落 interrupted(经执行器自己的事务提交,
         # 故用全新 session 读,避开 db_session 的过期快照)
         async with get_session_factory()() as s:

@@ -134,12 +134,15 @@ class AccessTokenData(BaseModel):
 
 
 class UserPublic(BaseModel):
-    """对外用户信息;`text_model_configured` 反映是否存在 active 文本配置(门禁信号,D9)。"""
+    """对外用户信息;`*_model_configured` 反映是否存在 active 文本/图片配置(门禁信号,D9)。"""
 
     id: int = Field(description="用户 ID(BIGINT UNSIGNED)")
     username: str = Field(description="用户名")
     text_model_configured: bool = Field(
         default=False, description="是否已配置 active 文本模型(前端据此路由向导)"
+    )
+    image_model_configured: bool = Field(
+        default=False, description="是否已配置 active 图片模型(前端形象图门禁信号)"
     )
 
 
@@ -294,10 +297,29 @@ class EpisodeCharacterPublic(BaseModel):
     motivation: str | None
     traits: list[str] | None
     appearance_desc: str | None
+    image_media_id: int | None = Field(
+        default=None, description="当前形象图指针(NULL=无形象图;逻辑指针,无 FK,M3)"
+    )
     source: str
     sort_order: int
     created_at: datetime
     updated_at: datetime
+
+
+class MediaPublic(BaseModel):
+    """富媒体对外视图(media 元数据 + 短期签名 URL;本期 `kind='image'` 形象图)。
+
+    由 service 的 `_portrait_view` dict 构造(非 ORM 行),含 `<img src>` 直用的签名 URL;
+    `content_type`/尺寸供前端预判渲染,`source` ∈ upload/generate。
+    """
+
+    media_id: int = Field(description="media ID(BIGINT UNSIGNED)")
+    signed_url: str = Field(description="内容端点相对 URL(`<img src>` 直用;含短期 token)")
+    content_type: str | None = Field(default=None, description="MIME(如 image/jpeg)")
+    width: int | None = Field(default=None, description="像素宽")
+    height: int | None = Field(default=None, description="像素高")
+    source: str = Field(description="来源:upload / generate")
+    created_at: datetime = Field(description="落库时间(UTC,毫秒精度)")
 
 
 class AnalysisPublic(BaseModel):

@@ -20,6 +20,8 @@ dependencies = [
     "litellm>=1.55",
     "httpx>=0.28",
     "langgraph>=0.2",
+    "pillow>=12.3.0",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]

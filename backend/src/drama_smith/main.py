@@ -19,12 +19,14 @@ from drama_smith.api.dramas import router as dramas_router
 from drama_smith.api.episodes import router as episodes_router
 from drama_smith.api.health import router as health_router
 from drama_smith.api.me import router as me_router
+from drama_smith.api.media import router as media_router
 from drama_smith.api.models import router as models_router
 from drama_smith.api.shots import router as shots_router
 from drama_smith.api.tasks import router as tasks_router
 from drama_smith.core.config import get_settings
 from drama_smith.core.errors import register_exception_handlers
 from drama_smith.db.base import dispose_engine, get_session_factory
+from drama_smith.storage import LocalFileStore
 from drama_smith.tasks import TaskExecutor
 
 logger = logging.getLogger("drama_smith")
@@ -37,7 +39,8 @@ _OPENAPI_TAGS: list[dict[str, str]] = [
     {"name": "models", "description": "BYOK 模型配置(文本/图片/视频):CRUD、激活、零成本自检。"},
     {"name": "dramas", "description": "剧目(CRUD)与剧集子集合。"},
     {"name": "episodes", "description": "剧集 CRUD、剧本版本与 AI 优化(异步)。"},
-    {"name": "characters", "description": "剧集预置角色 CRUD。"},
+    {"name": "characters", "description": "剧集预置角色 CRUD + 角色形象图(上传 / AI 生成 / 读)。"},
+    {"name": "media", "description": "富媒体字节签名 URL 直读(`<img src>`,免 Authorization)。"},
     {"name": "analysis", "description": "结构化拆解(异步)+ 双语义读 + 当前分析切换。"},
     {"name": "shots", "description": "分镜列表 / 重排 / 拆 / 合 / 改(含出场角色读写)。"},
     {"name": "tasks", "description": "任务读 + 协作式取消(异步用例轮询)。"},
@@ -67,6 +70,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if recovered:
         logger.info("启动恢复:残留 running 任务 → interrupted,count=%s", recovered)
     app.state.executor = executor
+    # 富媒体存储:本地磁盘 + HS256 签名 URL(复用 jwt_secret,不引新密钥,D2/D10)。
+    file_store = LocalFileStore(
+        settings.media_root,
+        settings.jwt_secret.get_secret_value(),
+        settings.media_signed_url_ttl_seconds,
+    )
+    file_store.ensure_root()
+    app.state.file_store = file_store
     yield
     logger.info("drama-smith 关闭:停执行器 + 释放 DB 连接")
     await executor.shutdown()
@@ -102,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(dramas_router, prefix="/api")
     app.include_router(episodes_router, prefix="/api")
     app.include_router(characters_router, prefix="/api")
+    app.include_router(media_router, prefix="/api")
     app.include_router(analysis_router, prefix="/api")
     app.include_router(shots_router, prefix="/api")
     app.include_router(tasks_router, prefix="/api")

@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     max_tasks_per_user: int = 4
     max_global_workers: int = 8
 
+    # ---- 富媒体(M3;本地磁盘 FileStore + 签名 URL 下发,backend.md §8 / architecture §5.6)----
+    # `media_root`:落盘根目录(`<media_root>/<user_id>/<yyyy>/<mm>/<uuid>.<ext>`);生产挂卷。
+    # `media_signed_url_ttl_seconds`:`GET /api/media/:id/content` 鉴权签名 token 有效期(复用
+    #   `jwt_secret` HS256,不引新密钥);过期前端从 `GET .../image` 重取。
+    # `media_upload_max_bytes`:上传请求体硬上限(防滥用 DoS);超 1 MiB 的图片由 Pillow 压缩至
+    #   ≤ 1 MiB(FR-L4),硬上限远大于软压缩阈以兜住合理原图。
+    media_root: str = "./media"
+    media_signed_url_ttl_seconds: int = 300
+    media_upload_max_bytes: int = 10 * 1024 * 1024
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_cors_origins(cls, value: Any) -> Any:

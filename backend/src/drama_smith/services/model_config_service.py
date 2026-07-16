@@ -271,6 +271,18 @@ async def require_active_text(session: AsyncSession, user_id: int) -> ModelConfi
     return config
 
 
+async def require_active_image(session: AsyncSession, user_id: int) -> ModelConfig:
+    """M3 形象图门禁:取 active 且 `status='active'` 的图片配置;无 → `ModelNotConfigured`。
+
+    镜像 `require_active_text`;`invalid` 配置视同未配(被自检判坏 key 不可用于生成)。
+    返回配置行(供 work 闭包经 `build_image_model_from_config` 解密构造 ImageModel)。
+    """
+    config = await model_config_repo.get_active_image_config(session, user_id)
+    if config is None:
+        raise ModelNotConfigured()
+    return config
+
+
 def build_text_model_from_config(
     config: ModelConfig,
     mek: bytes,
@@ -291,6 +303,26 @@ def build_text_model_from_config(
     return model
 
 
+def build_image_model_from_config(
+    config: ModelConfig,
+    mek: bytes,
+    *,
+    model_factory: ModelBuilder | None = None,
+) -> ImageModel:
+    """从**已加载**的配置行构造 `ImageModel`(同步、不再查 DB;供 work 闭包用**冻结的**配置)。
+
+    镜像 `build_text_model_from_config`:明文 Key 仅驻返回 adapter 内存(D8);`model_factory`
+    供测试注入替身。发起形象图生成时 service 经 `require_active_image` 取 config 行、work 闭包
+    捕获之 —— 运行期用户改 active 配置不影响在途任务(config 已冻结,D9)。
+    """
+    plaintext_key = crypto.decrypt(_envelope(config), mek)
+    model = (model_factory or llm_factory.build)(_snapshot(config), plaintext_key)
+    if not isinstance(model, ImageModel):
+        # 不可达:`require_active_image` 取的是 purpose='image' 行,factory 据此产 ImageModel。
+        raise ModelNotConfigured(details={"reason": "active_config_not_image"})
+    return model
+
+
 async def mark_config_invalid(
     session_factory: async_sessionmaker[AsyncSession], user_id: int, config_id: int
 ) -> None:
@@ -306,3 +338,8 @@ async def mark_config_invalid(
 async def has_text_configured(session: AsyncSession, user_id: int) -> bool:
     """`GET /api/me` 完成度信号:是否存在 active 文本配置(design D9)。"""
     return await model_config_repo.has_active_text(session, user_id)
+
+
+async def has_image_configured(session: AsyncSession, user_id: int) -> bool:
+    """`GET /api/me` 完成度信号:是否存在 active 图片配置(M3 形象图门禁,镜像 text)。"""
+    return await model_config_repo.has_active_image(session, user_id)

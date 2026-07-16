@@ -8,6 +8,7 @@ from drama_smith.db.models.analyses import Analysis
 from drama_smith.db.models.dramas import Drama
 from drama_smith.db.models.episode_characters import EpisodeCharacter
 from drama_smith.db.models.episodes import Episode
+from drama_smith.db.models.media import Media
 from drama_smith.db.models.model_configs import ModelConfig
 from drama_smith.db.models.refresh_tokens import RefreshToken
 from drama_smith.db.models.script_versions import ScriptVersion
@@ -22,6 +23,7 @@ __all__ = [
     "Drama",
     "Episode",
     "EpisodeCharacter",
+    "Media",
     "ModelConfig",
     "RefreshToken",
     "Script",

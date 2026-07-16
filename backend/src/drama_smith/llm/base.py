@@ -59,6 +59,13 @@ _PROVIDERS_BY_PURPOSE: dict[str, frozenset[str]] = {
     "video": VIDEO_PROVIDERS,
 }
 
+# litellm 自拼的端点后缀(用户在 BYOK 常误填完整端点);`normalize_base_url` 去尾这些后缀。
+_KNOWN_ENDPOINT_SUFFIXES: tuple[str, ...] = (
+    "/chat/completions",
+    "/images/generations",
+    "/embeddings",
+)
+
 # 未显式给 base_url 时的 OpenAI 兼容默认 endpoint(仅 openai 自身可靠;其余 provider 需 base_url)。
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
@@ -66,15 +73,19 @@ _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 def normalize_base_url(url: str | None) -> str | None:
     """规整自定义 base_url,供 litellm 接缝统一使用。
 
-    用户在 BYOK 里常填**完整端点**(如 `…/v1/chat/completions`),而 litellm 只要 base
-    (`…/v1`,自己拼 `/chat/completions`)。此处去尾 `/chat/completions` 与多余斜杠;`None` 透传。
-    同时让零成本探测拼出的 `/models` 落在正确路径(否则打到 `…/chat/completions/models` 误报)。
+    用户在 BYOK 里常填**完整端点**(如 `…/v1/chat/completions` 或 `…/v1/images/generations`),
+    而 litellm 只要 base(`…/v1`,自己拼 `/chat/completions` / `/images/generations`)。此处去尾
+    已知端点后缀(text `/chat/completions`、image `/images/generations`、embedding `/embeddings`)
+    与多余斜杠;`None` 透传。同时让零成本探测拼出的 `/models` 落在正确路径
+    (否则打到 `…/chat/completions/models` 误报)。
     """
     if url is None:
         return None
     cleaned = url.strip().rstrip("/")  # 先去尾斜杠,使 /chat/completions/ 也能识别
-    if cleaned.endswith("/chat/completions"):
-        cleaned = cleaned[: -len("/chat/completions")]
+    for suffix in _KNOWN_ENDPOINT_SUFFIXES:
+        if cleaned.endswith(suffix):
+            cleaned = cleaned[: -len(suffix)]
+            break  # 命中一个即止(端点后缀互斥,不会叠套)
     return cleaned or None
 
 

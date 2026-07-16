@@ -117,6 +117,18 @@ async def delete(session: AsyncSession, character: EpisodeCharacter) -> None:
     await session.flush()
 
 
+async def set_image_media(
+    session: AsyncSession, character: EpisodeCharacter, media_id: int | None
+) -> None:
+    """更新角色的当前形象图指针(`image_media_id`;M3 逻辑指针,无 FK)。
+
+    专用方法(不入 `_CHARACTER_FIELDS` 白名单):形象图经 `character_media_service` 专路径改,
+    不走通用角色 update。`media_id=None` 表清除指针。调用方已 `get` 校验归属。
+    """
+    character.image_media_id = media_id
+    await session.flush()
+
+
 async def bulk_create(
     session: AsyncSession,
     user_id: int,

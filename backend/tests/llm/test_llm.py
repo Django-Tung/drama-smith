@@ -12,7 +12,13 @@ import pytest
 from litellm.exceptions import AuthenticationError, RateLimitError
 
 from drama_smith.core.errors import ProviderAuthFailed, RateLimited
-from drama_smith.llm import ModelConfigSnapshot, ProbeNotSupported, litellm_text, validate_provider
+from drama_smith.llm import (
+    ModelConfigSnapshot,
+    ProbeNotSupported,
+    litellm_image,
+    litellm_text,
+    validate_provider,
+)
 from drama_smith.llm._probe import probe_models_endpoint
 from drama_smith.llm.base import (
     IMAGE_PROVIDERS,
@@ -223,6 +229,8 @@ class TestLitellmChat:
         (None, None),
         ("https://api.siliconflow.cn/v1/chat/completions", "https://api.siliconflow.cn/v1"),
         ("https://api.siliconflow.cn/v1/chat/completions/", "https://api.siliconflow.cn/v1"),
+        ("https://api.siliconflow.cn/v1/images/generations", "https://api.siliconflow.cn/v1"),
+        ("https://api.test/v1/embeddings/", "https://api.test/v1"),
         ("https://api.test/v1", "https://api.test/v1"),
         ("https://api.test/v1/", "https://api.test/v1"),
         ("  https://api.test/v1/chat/completions  ", "https://api.test/v1"),
@@ -288,4 +296,140 @@ class TestBaseUrlRouting:
         model = LitellmTextModel(snap, "k")
         await model.probe()
         # probe 拿到规整后的 base,/models 才能落在正确路径(否则误报 invalid)
+        assert captured["base_url"] == "https://api.siliconflow.cn/v1"
+
+
+# ---- image generate() 映射 + 有界重试(M3;镜像 chat 范式)----
+def _img_resp(url: str = "https://cdn.test/img.png") -> SimpleNamespace:
+    return SimpleNamespace(data=[SimpleNamespace(url=url)])
+
+
+class TestLitellmImage:
+    """鉴权失败不重试、限流/超时重试、params 透传、耗尽后 RateLimited、base_url 路由。"""
+
+    async def test_returns_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            return _img_resp("https://cdn.test/x.png")
+
+        monkeypatch.setattr(litellm, "aimage_generation", fake)
+        monkeypatch.setattr(litellm_image, "_BASE_DELAY", 0.0)
+        model = LitellmImageModel(_snap("image", "seedream"), "k")
+        assert await model.generate("一只猫") == "https://cdn.test/x.png"
+
+    async def test_transmits_prompt_model_and_params(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            captured.update(kwargs)
+            return _img_resp()
+
+        monkeypatch.setattr(litellm, "aimage_generation", fake)
+        monkeypatch.setattr(litellm_image, "_BASE_DELAY", 0.0)
+        model = LitellmImageModel(_snap("image", "seedream"), "k")
+        await model.generate("一只猫", size="1024x1024", n=1)
+        assert captured["prompt"] == "一只猫"
+        assert captured["model"] == "m"
+        assert captured["size"] == "1024x1024"
+        assert captured["n"] == 1
+
+    async def test_auth_failure_not_retried(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = {"n": 0}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            calls["n"] += 1
+            raise AuthenticationError("bad key", "m", "openai")
+
+        monkeypatch.setattr(litellm, "aimage_generation", fake)
+        monkeypatch.setattr(litellm_image, "_BASE_DELAY", 0.0)
+        model = LitellmImageModel(_snap("image", "seedream"), "k")
+        with pytest.raises(ProviderAuthFailed):
+            await model.generate("p")
+        assert calls["n"] == 1  # 鉴权失败立即抛,不重试
+
+    async def test_rate_limit_retries_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(litellm_image, "_MAX_RETRIES", 3)
+        monkeypatch.setattr(litellm_image, "_BASE_DELAY", 0.0)
+        calls = {"n": 0}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise RateLimitError("slow down", "m", "openai")
+            return _img_resp("ok")
+
+        monkeypatch.setattr(litellm, "aimage_generation", fake)
+        model = LitellmImageModel(_snap("image", "seedream"), "k")
+        assert await model.generate("p") == "ok"
+        assert calls["n"] == 3
+
+    async def test_rate_limit_exhausted_raises_rate_limited(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(litellm_image, "_MAX_RETRIES", 2)
+        monkeypatch.setattr(litellm_image, "_BASE_DELAY", 0.0)
+        calls = {"n": 0}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            calls["n"] += 1
+            raise RateLimitError("slow", "m", "openai")
+
+        monkeypatch.setattr(litellm, "aimage_generation", fake)
+        model = LitellmImageModel(_snap("image", "seedream"), "k")
+        with pytest.raises(RateLimited):
+            await model.generate("p")
+        assert calls["n"] == 3  # 1 首发 + 2 重试
+
+    async def test_custom_provider_when_base_url_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            captured.update(kwargs)
+            return _img_resp()
+
+        monkeypatch.setattr(litellm, "aimage_generation", fake)
+        monkeypatch.setattr(litellm_image, "_BASE_DELAY", 0.0)
+        snap = ModelConfigSnapshot(
+            purpose="image",
+            provider="seedream",
+            model="seedream-3.0",
+            base_url="https://api.siliconflow.cn/v1/images/generations",
+        )
+        model = LitellmImageModel(snap, "k")
+        await model.generate("p")
+        # 规整到 …/v1(去尾 /images/generations)→ 显式 openai 路由(与 text 同款修法)
+        assert captured["custom_llm_provider"] == "openai"
+        assert captured["api_base"] == "https://api.siliconflow.cn/v1"
+        assert captured["model"] == "seedream-3.0"
+
+    async def test_native_routing_without_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake(**kwargs: Any) -> SimpleNamespace:
+            captured.update(kwargs)
+            return _img_resp()
+
+        monkeypatch.setattr(litellm, "aimage_generation", fake)
+        monkeypatch.setattr(litellm_image, "_BASE_DELAY", 0.0)
+        model = LitellmImageModel(_snap("image", "seedream"), "k")  # 无 base_url → 原生路由
+        await model.generate("p")
+        assert "custom_llm_provider" not in captured
+        assert "api_base" not in captured
+
+    async def test_probe_uses_normalized_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake_probe(base_url, api_key, *, provider, client=None):  # noqa: ANN001
+            captured["base_url"] = base_url
+
+        monkeypatch.setattr(litellm_image, "probe_models_endpoint", fake_probe)
+        snap = ModelConfigSnapshot(
+            purpose="image",
+            provider="seedream",
+            model="m",
+            base_url="https://api.siliconflow.cn/v1/images/generations",
+        )
+        model = LitellmImageModel(snap, "k")
+        await model.probe()
         assert captured["base_url"] == "https://api.siliconflow.cn/v1"

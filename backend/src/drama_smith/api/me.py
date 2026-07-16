@@ -24,8 +24,9 @@ router = APIRouter(tags=["users"])
     "/me",
     summary="获取当前用户",
     description=(
-        "返回已认证用户的 id、用户名,及文本模型配置完成度"
-        "(`text_model_configured`:是否存在 active 文本配置,前端据此路由向导)。"
+        "返回已认证用户的 id、用户名,及文本/图片模型配置完成度"
+        "(`text_model_configured` / `image_model_configured`:是否存在 active 配置,"
+        "前端据此路由向导与形象图门禁)。"
     ),
     response_model=Envelope[UserPublic],
     responses={
@@ -39,11 +40,13 @@ async def me(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Envelope[UserPublic]:
-    configured = await model_config_service.has_text_configured(session, current_user.id)
+    text_configured = await model_config_service.has_text_configured(session, current_user.id)
+    image_configured = await model_config_service.has_image_configured(session, current_user.id)
     return Envelope(
         data=UserPublic(
             id=current_user.id,
             username=current_user.username,
-            text_model_configured=configured,
+            text_model_configured=text_configured,
+            image_model_configured=image_configured,
         )
     )

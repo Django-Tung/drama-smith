@@ -24,6 +24,7 @@ from drama_smith.db.base import utcnow
 from drama_smith.db.models import User
 from drama_smith.db.repositories import user_repo
 from drama_smith.db.session import get_session
+from drama_smith.storage import FileStore
 from drama_smith.tasks import TaskExecutor
 
 # `tokenUrl` 仅用于 OpenAPI / Swagger「Authorize」表单展示;实际登录端点接收 JSON。
@@ -78,6 +79,18 @@ def get_executor(request: Request) -> TaskExecutor:
     return executor
 
 
+def get_file_store(request: Request) -> FileStore:
+    """FastAPI 依赖:从 `app.state.file_store` 取进程内 FileStore(`main.lifespan` 构造注入)。
+
+    形象图上传 / 生成 / 读取经此拿存储抽象(落盘 + 签名 URL);`app.state.file_store` 由 lifespan
+    在启动期构造 + `ensure_root()`;未注入则 fail-fast(测试需 override `client` 注入替身)。
+    """
+    file_store: FileStore | None = getattr(request.app.state, "file_store", None)
+    if file_store is None:
+        raise RuntimeError("FileStore 未注入 app.state(检查 lifespan 是否已启动)")
+    return file_store
+
+
 async def get_current_user(
     token: Annotated[str, Depends(oauth_scheme)],
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -105,3 +118,4 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 UserDep = Annotated[User, Depends(get_current_user)]
 MekDep = Annotated[bytes, Depends(get_crypto)]
 ExecutorDep = Annotated[TaskExecutor, Depends(get_executor)]
+FileStoreDep = Annotated[FileStore, Depends(get_file_store)]
