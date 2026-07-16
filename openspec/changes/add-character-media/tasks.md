@@ -56,16 +56,16 @@
 
 ## 9. 前端(剧集角色形象图 UI)
 
-- [ ] 9.1 `types/drama.ts`:`MediaPublic`、`EpisodeCharacter.image_media_id`(+ 派生 `image?: MediaPublic | null` 若列表需带)、`TaskType` 加 `'image'`。
-- [ ] 9.2 `api/endpoints.ts`:`charactersApi.uploadImage(episodeId, cid, file)`(`FormData` + `request(..., { body: FormData, headers: 不设 content-type 让浏览器带 boundary })`、返 `MediaPublic`)、`generateImage(episodeId, cid)`(POST 202 返 `Task`)、`getImage(episodeId, cid)`(GET,204 → null);`mediaApi` 暂不需(签名 URL 直拼 `<img src>`)。
-- [ ] 9.3 `components/ui/avatar.tsx`(新,轻量自建无 Radix):`<Avatar src|null name fallback size />`,src 用签名 URL,无则首字母圆形占位。
-- [ ] 9.4 `features/episode/CharacterGroup.tsx` / `CastTab.tsx`:角色卡头像展示(`<Avatar>`,挂载/操作后 `getImage` 拉签名 URL);「上传图片」按钮(隐藏 `<input type=file accept=image/*>` + onChange → `uploadImage` → 刷新头像);「AI 生成」按钮(`generateImage` → `useTaskPolling(taskId,'image')` 终态后 `getImage` 刷新);门禁:无 `image_model_configured` 或角色 `appearance_desc` 空 → 禁用「AI 生成」并 tooltip 提示。
-- [ ] 9.5 验证:`cd frontend && yarn install`(若 lock 无变)后 `yarn tsc --noEmit`(`npm run typecheck`,只读不改 lock)+ `yarn lint` + `yarn build` 全绿(strict TS `noUnusedLocals/Parameters`);无新运行时依赖。
+- [x] 9.1 `types/drama.ts`:加 `MediaPublic`(media_id/signed_url/content_type/width/height/source/created_at)+ `MediaSource`、`EpisodeCharacter.image_media_id`、`TaskType` 加 `'image'`;`types/auth.ts::User` 加 `image_model_configured`;`types/index.ts` 导出新增。
+- [x] 9.2 `api/endpoints.ts`:`charactersApi.getPortrait`/`uploadPortrait`/`generatePortrait`(命名随 `/portrait/*` 路由,与 §8.2 同款「非 /image/*」);`uploadPortrait` 用 `FormData`,`request` 不设 content-type 由浏览器带 boundary、返 `MediaPublic`;`getPortrait` 204 → null;`mediaApi` 不需(签名 URL 直拼 `<img src>`)。
+- [x] 9.3 `components/ui/avatar.tsx`(新,轻量自建无 Radix):`<Avatar src|null name size />`,src 用签名 URL,无则取 `name` 首字符圆形占位(兼容中英文)。
+- [x] 9.4 `features/episode/CastTab.tsx`:新增 `CharacterCard`(每卡自带 portrait 状态 + `useTaskPolling` image 轮询),`CharacterGroup` 改渲染 `CharacterCard`;头像 `<Avatar>` 挂载 / 操作后 `getPortrait` 拉签名 URL;「上传图片」隐藏 `<input type=file accept=image/*>` → `uploadPortrait` → 刷新;「AI 生成」`generatePortrait` → `useTaskPolling` 终态 succeeded 后 `getPortrait` 刷新;门禁 `image_model_configured` 假 或 `appearance_desc` 空 → 禁用「AI 生成」+ `<Tooltip>` 提示(span 包裹 disabled 按钮以承载 hover)。形象图对 preset / analysis 两源均开放(与文本字段可编辑性解耦)。
+- [x] 9.5 验证:`yarn typecheck`(tsc)+ `yarn lint`(eslint)+ `yarn build`(tsc && vite build)全绿(strict TS `noUnusedLocals/Parameters`);无新运行时依赖(`package.json` 未动)。
 
 ## 10. 收尾:质量门 + 文档同步 + 提交
 
-- [ ] 10.1 后端门:`uv run ruff check .` 全绿(仅 1 处 baseline `analysis_graph.py:41` E501,非本变更文件,不动)+ `uv run pytest --cov --cov-fail-under=90`(已过 92.3%)。
-- [ ] 10.2 `alembic upgrade head` 外部 MySQL 实跑通过;前后端联调(后端 `uv run uvicorn drama_smith.main:app --reload` + 前端 `yarn dev`):登录 → 建剧/剧集 → 预置角色填 appearance_desc → 配 image 模型 → 角色卡上传图片(渲染)+ AI 生成(轮询→渲染)+ 越权 404 + 无门禁禁用。
-- [ ] 10.3 文档回写(apply 阶段发现的偏离):`docs/tech-solution/architecture.md` 行 130 的合一端点改为 upload/generate/get 三条(D6);`backend.md §8` 补 `LocalFileStore` 实现细节 + `media_root`/签名 URL TTL;`database.md §3.7` 补 `media` 表最终字段(含生成列单选约束)。
-- [ ] 10.4 `openspec validate add-character-media` 通过;归档前交用户验收;通过后 `openspec archive add-character-media`。
-- [ ] 10.5 提交:中文 commit、**不带** `Co-Authored-By: Claude` 尾注;直接落 `main`(单人无 PR)。后端 / 前端 / 文档分批提交。
+- [x] 10.1 后端门:`uv run ruff check .` 全绿(仅 1 处 baseline `analysis_graph.py:41` E501,非本变更文件,不动)+ `uv run pytest --cov --cov-fail-under=90`(已过 92.3%,263 passed)。
+- [ ] 10.2 `alembic upgrade head` 外部 MySQL 实跑通过(已至 head `8f2a7c4d1e6b`,`media` 表 + `episode_characters.image_media_id` 已建);**前后端联调待用户验收**:后端 `uv run uvicorn drama_smith.main:app --reload` + 前端 `yarn dev`:登录 → 建剧/剧集 → 预置角色填 appearance_desc → 配 image 模型 → 角色卡上传图片(渲染)+ AI 生成(轮询→渲染)+ 越权 404 + 无门禁禁用。
+- [x] 10.3 文档回写(apply 阶段发现的偏离):`architecture.md` §⑤ 合一端点改为 get/upload/generate 三条 `/portrait/*` + 内容端点 `/api/media/:id/content`;`backend.md` lifespan 构造 `LocalFileStore(media_root, jwt_secret, ttl)` + `ensure_root()`、§8 重写 `FileStore` Protocol(sign/verify/build_signed_url)+ 签名 URL/压缩细节、配置补 `media_signed_url_ttl_seconds`/`media_upload_max_bytes`;`database.md` §3.7 `media` 表对齐迁移(含 `selected_key` 生成列 + UNIQUE、`extra`/`provider_task`/`last_tested_at`)+ 唯一约束汇总补 `selected_key`。
+- [x] 10.4 `openspec validate add-character-media` 通过(「Change is valid」);**归档待用户验收后** `openspec archive add-character-media`。
+- [ ] 10.5 提交:中文 commit、**不带** `Co-Authored-By: Claude` 尾注;直接落 `main`(单人无 PR)。后端(ab5522a 已提)/ 前端 / 文档分批提交。

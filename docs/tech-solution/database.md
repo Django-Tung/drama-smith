@@ -225,22 +225,26 @@
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | BIGINT UNSIGNED | PK, AI | |
-| user_id | BIGINT UNSIGNED | FK u→users, INDEX | |
+| user_id | BIGINT UNSIGNED | FK u→users, INDEX(user_id,owner_type,owner_id) | |
 | kind | ENUM('image','video','final') | NOT NULL | |
-| owner_type | ENUM('shot','character','library','episode') | NOT NULL | 多态归属 |
+| owner_type | ENUM('character','shot','library','episode') | NOT NULL | 多态归属 |
 | owner_id | BIGINT UNSIGNED | NOT NULL | 配合 owner_type |
 | source | ENUM('upload','generate') | NOT NULL | |
 | storage_provider | VARCHAR(32) | NOT NULL DEFAULT 'local' | 本期 'local';预留对象存储 |
-| storage_key | VARCHAR(512) | NOT NULL | FileStore 对象键/路径 |
-| content_type | VARCHAR(128) | NOT NULL | mime |
-| size_bytes | INT UNSIGNED | NOT NULL | |
+| storage_key | VARCHAR(512) | NOT NULL | FileStore 对象键/相对路径 |
+| content_type | VARCHAR(64) | NOT NULL | mime |
+| size_bytes | BIGINT UNSIGNED | NOT NULL | |
 | width / height | INT | NULL | 图/视频 |
-| duration_sec | DECIMAL(6,2) | NULL | 视频/成片 |
+| duration_sec | NUMERIC(8,2) | NULL | 视频/成片 |
 | selected | TINYINT(1) | NOT NULL DEFAULT 0 | 用户在多候选中选用(合并取此) |
-| status | ENUM('ready','processing','failed') | NOT NULL DEFAULT 'processing' | |
+| selected_key | VARCHAR(128) | GENERATED ALWAYS AS (CASE WHEN selected=1 THEN CONCAT(user_id,'-',owner_type,'-',owner_id) ELSE NULL END) VIRTUAL, **UNIQUE** | 单选保证(镜像 model_configs.active_key) |
+| status | ENUM('ready','processing','failed') | NOT NULL DEFAULT 'ready' | |
+| extra | JSON | NULL | 扩展(尺寸 / 供应商回参等) |
+| provider_task | VARCHAR(256) | NULL | 异步供应商任务 id(M3 视频) |
+| last_tested_at | DATETIME(3) | NULL | 自检时间(预留) |
 | created_at / updated_at | DATETIME(3) | NOT NULL | |
 
-> 索引:(user_id, owner_type, owner_id) 列某镜/某角色候选;(episode_id 需经 owner 解析,见下)。多候选:同 owner 多行,`selected` 每组至多一条(应用层/事务保证)。
+> **单选约束**:生成列 `selected_key` 仅在 `selected=1` 时取 `user_id-owner_type-owner_id`,对其建 `UNIQUE`(MySQL 允许多 NULL,故非选中行不冲突);切换选中在事务内翻旧行为 0 再写新行(避免 UNIQUE 冲突)。索引 `(user_id, owner_type, owner_id)` 列某镜/某角色候选(episode_id 需经 owner 解析)。
 
 ### 3.8 任务域
 
@@ -267,7 +271,7 @@
 ## 4. 索引策略(汇总)
 
 - **隔离索引**:所有业务表的 `user_id` 单列索引(列表/过滤主力)。
-- **唯一约束**:`users.username`、`refresh_tokens.token_hash`、`scripts.episode_id`(1:1)、`model_configs` 的 `active_key` 生成列唯一(每用途一 active)。
+- **唯一约束**:`users.username`、`refresh_tokens.token_hash`、`scripts.episode_id`(1:1)、`model_configs` 的 `active_key` 生成列唯一(每用途一 active)、`media` 的 `selected_key` 生成列唯一(每 owner 至多一条 selected)。
 - **业务索引**:任务页 `(user_id,status,created_at)`;分镜 `(episode_id,seq)`;角色库 `(user_id,name)`/`(user_id,is_protagonist)`;媒体 `(user_id,owner_type,owner_id)`。
 - **避免过度索引**:多态 `media.owner_id` 不单独建(随 `(user_id,owner_type,owner_id)` 复合覆盖)。
 

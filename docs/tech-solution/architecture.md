@@ -127,7 +127,10 @@
 | GET/POST | `/api/episodes/:id/characters` | Bearer | 剧集角色列表 / 新建(`fromLibraryId` 可引入库角色) | FR-A4/L5 |
 | GET/PUT/DELETE | `/api/episodes/:id/characters/:cid` | Bearer | 改(含形象参考)/ 删 | FR-A4 |
 | POST | `/api/episodes/:id/characters/:cid/promote-to-library` | Bearer | 剧集角色**加入库**(抽取复制) | FR-L3 |
-| POST | `/api/episodes/:id/characters/:cid/image` | Bearer | 角色形象参考(上传或生成) | FR-A4/§4.2 |
+| GET | `/api/episodes/:id/characters/:cid/portrait` | Bearer | 取当前形象图(无图 204;返签名 URL 视图) | FR-A4/§4.2 |
+| POST | `/api/episodes/:id/characters/:cid/portrait/upload` | Bearer | 上传形象图(multipart;≤10MB 硬限,超 1MB Pillow 压缩) | FR-A4/§4.2 |
+| POST | `/api/episodes/:id/characters/:cid/portrait/generate` | Bearer | AI 生成形象图(异步 202;门禁:active 图片模型 + 外貌描述非空) | FR-A4/§4.2 |
+| GET | `/api/media/:mediaId/content` | 签名 token | 形象图二进制内容(短期 token 即凭证,无 Bearer;`<img src>` 直用) | FR-A4 |
 
 **⑥ 分析拆解 / 分镜**
 

@@ -83,7 +83,12 @@ app = FastAPI(title="drama-smith", lifespan=lifespan)
 async def lifespan(app):
     settings = get_settings()
     engine = create_async_engine(settings.database_url, pool_size=..., pool_pre_ping=True)
-    filestore = LocalFileStore(root=settings.media_root)
+    filestore = LocalFileStore(
+        settings.media_root,
+        settings.jwt_secret.get_secret_value(),   # 复用 jwt_secret 签名(无新密钥)
+        settings.media_signed_url_ttl_seconds,
+    )
+    filestore.ensure_root()                       # 建 media_root 目录
     executor = TaskExecutor(engine, filestore, max_per_user=settings.max_tasks_per_user)
     await executor.recover_running()          # running → interrupted(§7.4)
     app.state.engine, app.state.executor, app.state.filestore = engine, executor, filestore
@@ -206,20 +211,24 @@ class TaskExecutor:
 
 ## 8. 富媒体存储(`storage/`)
 
-**接口(`base.py`)**:
+**接口(`base.py`)**(`runtime_checkable` Protocol;以 `media_id` 为签名主键,而非 storage_key):
 
 ```python
 class FileStore(Protocol):
-    async def save(self, data: bytes | stream, ext: str, meta: MediaMeta) -> str: ...  # 返回 storage_key
-    async def read(self, key: str) -> bytes: ...
-    async def delete(self, key: str): ...
-    async def sign_url(self, key: str, ttl: int) -> str: ...   # 短期签名/代理 URL
+    def save(self, user_id: int, data: bytes, *, ext: str, content_type: str) -> tuple[str, int]: ...  # -> (storage_key, size_bytes)
+    def read(self, storage_key: str) -> bytes: ...
+    def delete(self, storage_key: str) -> None: ...
+    def sign(self, media_id: int) -> tuple[str, int]: ...      # -> (token, exp);HS256 {sub=media_id, exp}
+    def verify(self, token: str, media_id: int) -> bool: ...    # 校签名 + sub == media_id + 未过期
+    def build_signed_url(self, media_id: int, token: str, exp: int) -> str: ...  # -> /api/media/<id>/content?token=&exp=
+    def ensure_root(self) -> None: ...                          # 建根目录
 ```
 
-- **本地实现(`local.py`)**:按 `<media_root>/<user_id>/<yyyy>/<mm>/<uuid>.<ext>` 落盘;`storage_key` = 相对路径;`sign_url` → 鉴权下载端点(带短期 token)。
-- **上传约束**:库角色/形象图 ≤ 1MB,Pillow 压缩至 ≤ 1MB([FR-L4](../requirements/features/character-library.md));视频体积大,记 `size_bytes` + 配额。
-- **多候选**:`media` 表同 owner 多行,`selected` 标记选用;合并取 `selected`。
-- **迁移对象存储**:仅新增 `S3FileStore`/`MinioFileStore`,`media.storage_provider`/`storage_key` 不变。
+- **本地实现(`local.py`,`LocalFileStore(media_root, secret, ttl_seconds)`)**:按 `<media_root>/<user_id>/<yyyy>/<mm>/<uuid>.<ext>` 落盘;`storage_key` = 相对根的路径;`save` 顺带写文件并返回 `(key, size_bytes)`。
+- **签名 URL(D10)**:`sign` 以 HS256 签 `{sub: media_id, exp: now+ttl}`,**复用 `jwt_secret`**(无新密钥);`build_signed_url` 拼相对 `/api/media/<id>/content?token=&exp=`。内容端点 `verify` 通过即放行(token 即凭证,不校 Bearer / 不查 user),响应带 `Cache-Control: private, max-age=60`。
+- **上传约束**:硬上限 `media_upload_max_bytes`(默认 10MB)→ 超限 413;Pillow 解码失败 / 非图 → 422;超 1MiB(软阈值)递降 JPEG 质量重压缩。视频体积大,记 `size_bytes` + 配额(M3+)。
+- **多候选 + 单选**:`media` 表同 owner 多行,新行 `selected=1` 时事务内翻同 owner 旧行为 0;**DB 层以生成列 `selected_key` + UNIQUE 保证每组至多一条 selected**(镜像 `model_configs.active_key`,见 [database §3.7](./database.md))。
+- **迁移对象存储**:仅新增 `S3FileStore`/`MinioFileStore`,`media.storage_provider`/`storage_key` 不变;`sign`/`verify` 契约不变。
 
 ---
 
@@ -252,7 +261,7 @@ def decrypt(env: Envelope, mek: bytes) -> str:
 
 ## 10. 配置与错误处理
 
-**配置(`core/config.py`)**:`pydantic-settings.BaseSettings`,字段含 `database_url`、`jwt_secret`、`jwt_access_ttl`(15m)、`refresh_ttl_days`(7)、`mek`(env `DS_MEK`,base64 32B)、`media_root`、`cors_origins`、`max_tasks_per_user`、`max_global_workers`、`login_max_failures`(5)、`login_lock_minutes`(15)。敏感字段标 `SecretStr`、不入 schema。
+**配置(`core/config.py`)**:`pydantic-settings.BaseSettings`,字段含 `database_url`、`jwt_secret`、`jwt_access_ttl`(15m)、`refresh_ttl_days`(7)、`mek`(env `DS_MEK`,base64 32B)、`media_root`、`media_signed_url_ttl_seconds`(300)、`media_upload_max_bytes`(10MB)、`cors_origins`、`max_tasks_per_user`、`max_global_workers`、`login_max_failures`(5)、`login_lock_minutes`(15)。敏感字段标 `SecretStr`、不入 schema。
 
 **错误(`core/errors.py` + 全局异常处理)**:领域异常 → [architecture §3.2](./architecture.md) 错误格式。
 
